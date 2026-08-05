@@ -40,6 +40,7 @@ The project presents a strong integration of practical industry challenges with 
 
 **Company / Org:** Abt Global  
 **Challenge Advisor:** Anita Nti, [Email address]  
+**AI Studio Coach:** Nagalakshmi Pulivarthi,nagalakshmi.pulivarthi@breakthroughtech.org  
 **Program:** Break Through Tech AI Studio - Fall 2026
 
 ---
