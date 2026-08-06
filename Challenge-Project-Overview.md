@@ -54,10 +54,13 @@ Abt Global is a leader in research, technical assistance, and evaluation in the 
 ## 🎯 The Challenge
 
 ### Project Summary
-In this project, you will use SAS datasets and legacy SAS programs and large language model (LLM)-based agentic AI techniques to translate SAS code into Python, validate outputs, and generate documentation of data processing workflows. This will help our company efficiently migrate legacy SAS systems to modern, scalable Python-based data pipelines while reducing manual effort and errors.
+In this project, you will use SAS datasets and legacy SAS programs and large language model (LLM)-based agentic AI techniques to translate SAS code into Python, validate outputs, and generate documentation of data processing workflows. This will help our company address the challenge of efficiently migrating legacy SAS systems to modern, scalable Python-based data pipelines while reducing manual effort and errors.
 
 ### Success Criteria
-Success will be measured by the accuracy, completeness, and usability of the end-to-end migration system. A successful outcome includes a functional prototype that reliably migrates a SAS pipeline, validates results, and explains the transformation process.
+Success for this project will be measured through a combination of accuracy, completeness, and usability of the end-to-end migration system. A successful project will deliver a functional, end-to-end prototype that can reliably migrate a SAS data pipeline to Python, validate the results, and clearly explain the transformation process.
+
+### Stretch Goals
+Although the core task is already complex due to macros and algorithmic logic in the pipeline. Additional work could include improving validation, enhancing documentation, building a simple demo interface, or applying the system to more complex SAS programs if time permits.
 
 ### Project Milestones
 
