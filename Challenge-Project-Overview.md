@@ -65,9 +65,9 @@ Use these milestones to guide your work. Your team will create a **GitHub Projec
 
 | Month      | Milestone                 | Key Activities                                                   |
 |------------|---------------------------|------------------------------------------------------------------|
-| **September** | Data Understanding        | Explore dataset, handle missing values, document findings       |
-| **October**   | Model Development         | Train baseline model, experiment with approaches, iterate      |
-| **November**  | Evaluation & Presentation  | Finalize model, prepare presentation, document results          |
+| **September** | Data Exploration & Setup        | Understand SAS code structures (DATA step, PROC SQL), explore sample datasets, and build initial SAS-to-Python translation prototypes. Set up the environment for executing Python scripts and loading SAS data.       |
+| **October**   | Core System Development         | Develop the main translation module, implement execution pipelines, and build validation logic (row counts, column checks, aggregates). Generate basic comparison outputs between SAS and Python results.      |
+| **November**  | End-to-End Pipeline Migration  | Apply the system to a real SAS pipeline consisting of four dependent programs. The system should successfully translate, execute, validate, and document the pipeline from start to finish using the provided input dataset. Finalize outputs and prepare a demonstration of the full migration workflow.s          |
 
 > **Note for the team:** Please create a GitHub Projects board in this repository to break these milestones into weekly tasks. Go to the **Projects** tab → **New project** → Choose **Board** → Add columns for each month.
 
