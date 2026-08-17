@@ -39,8 +39,7 @@ The project presents a strong integration of practical industry challenges with 
 # AI-Powered SAS Migration
 
 **Company / Org:** Abt Global  
-**Challenge Advisor:** Anita Nti, [Email address]  
-**AI Studio Coach:** Nagalakshmi Pulivarthi,nagalakshmi.pulivarthi@breakthroughtech.org  
+**Challenge Advisor:** Sameer Desale, Sameer.Desale@abtglobal.com  
 **Program:** Break Through Tech AI Studio - Fall 2026
 
 ---
@@ -97,7 +96,7 @@ Use these milestones to guide your work. Your team will create a **GitHub Projec
 - Natural Language Processing (NLP)
 - Large Language Models (LLMs)/ Generative AI
 - Agentic AI / Workflow AutomationCode Translation and Validation
-
+  
 **Recommended Libraries:**
 - [e.g., pandas, scikit-learn, TensorFlow, Hugging Face]
 
@@ -159,4 +158,4 @@ I’m excited to work with you!
 
 ## ❓ Questions?
 
-Please bring any questions to our first meeting during the week of August 24th (Break Through Tech’s Bridge to Studio - Session C).
+Please bring any questions to our first meeting during the week of August 24th (Break Through Tech’s Bridge to Studio - Session C). 

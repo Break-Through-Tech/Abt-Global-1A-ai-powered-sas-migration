@@ -1,0 +1,2271 @@
+NOTE: Copyright (c) 2025 by SAS Institute Inc., Cary, NC, USA.
+NOTE: SAS (r) Proprietary Software 9.4 (TS1M9)
+      Licensed to ABT GLOBAL LLC - SERVICE PROVIDER, Site 70213852.
+NOTE: This session is executing on the X64_DSRV22  platform.
+
+
+
+NOTE: Analytical products:
+
+      SAS/STAT 15.4
+      SAS/ETS 15.4
+      SAS/IML 15.4
+
+NOTE: Additional host information:
+
+ X64_DSRV22 WIN 10.0.20348  Server
+
+NOTE: SAS initialization used:
+      real time           1.66 seconds
+      cpu time            1.46 seconds
+
+1    *Note: it takes less than 5 minutes to run this program;
+2    *****************************************************;
+3    * Create Star analysis data file                    *;
+4    *                                                   *;
+5    * SAS 9.4 WIN                                       *;
+6    *                                                   *;
+7    * YALE CORE                                         *;
+8    *                                                   *;
+9    * For questions, please submit an inquiry to        *;
+10   * the QualityNet Question & Answer Tool at:         *;
+11   * https://cmsqualitysupport.service-now.com/qnet_qa *;
+12   *****************************************************;
+13
+14   /*This file is used to derive analysis data 'Std_data_2025Jul_analysis', which will be used in
+14 ! programs 1 and 2*/
+15   %LET PATH1=G:\breakthrough\Starrating; /* For 2025 Jul released data, MUST BE CHANGED */
+16   %LET PATH2=G:\breakthrough\SAS output;/* For derived data sets, MUST BE CHANGED */
+17   %LET PATH3=G:\breakthrough\SAS pack;  /* For SAS macros , MUST BE CHANGED  */
+18
+19   LIBNAME HC "&PATH1";
+NOTE: Libref HC was successfully assigned as follows:
+      Engine:        V9
+      Physical Name: G:\breakthrough\Starrating
+20   LIBNAME R "&PATH2";
+NOTE: Libref R was successfully assigned as follows:
+      Engine:        V9
+      Physical Name: G:\breakthrough\SAS output
+21
+22   %INCLUDE "&path3.\Star_Macros.sas";/*calling macros*/
+320
+321  %LET year = 2025;
+322  %LET quarter = Jul;
+323
+324  %LET MEASURE_MEAN=R.measure_average_stddev_&year.&quarter; /*mean and standard deviation of the
+324! original measure scores*/
+325  %LET MEASURE_ANALYSIS=R.Std_data_&year.&quarter._analysis; /* derived final analysis file */
+326  %LET RESULTS=R.Star_&year.&quarter; /* derive hospital-level Star file */
+327  %LET NATIONAL_MEAN=R.national_average_&year.&quarter; /* derived national average group and
+327! summary scores results */
+328
+329
+330  /*proc contents data=HC.Alldata_&year.&quarter.;run;*/
+331
+332  /* measures on Hospital Compare in 2025Jul, after excluding re_tired measures, no_directional
+332! measures,
+333      structural measures, and voluntary measures. */
+334  %LET measure_all = MORT_30_AMI MORT_30_CABG MORT_30_COPD MORT_30_HF MORT_30_PN  MORT_30_STK
+334! PSI_4_SURG_COMP
+335  COMP_HIP_KNEE HAI_1-HAI_6 PSI_90_SAFETY
+336  EDAC_30_AMI EDAC_30_HF EDAC_30_PN OP_32 READM_30_CABG READM_30_COPD READM_30_HIP_KNEE
+336! READM_30_HOSP_WIDE OP_35_ADM OP_35_ED OP_36
+337  H_COMP_1_STAR_RATING H_COMP_2_STAR_RATING H_COMP_3_STAR_RATING H_COMP_5_STAR_RATING
+337! H_COMP_6_STAR_RATING H_COMP_7_STAR_RATING H_GLOB_STAR_RATING H_INDI_STAR_RATING
+338  HCP_COVID_19 IMM_3 OP_10 OP_13  OP_18b /*OP_2*/ OP_22 OP_23 OP_29 /*OP_3b*/ OP_8  PC_01
+338! SAFE_USE_OF_OPIOIDS SEP_1;
+339  *OP_2 and OP_3b are removed for year 2025;*SAFE_USE_OF_OPIOIDS is added for year 2025;
+340
+341
+342  ************************************************************************
+343  * APPLY THE FOLLOWING EXCLUSION CRITERIA:                              *
+344  * MEASURE VOLUME <=100                                                 *
+345  ************************************************************************;
+346
+347  DATA All_data_&year.&quarter ;
+348      set HC.Alldata_&year.&quarter.;
+NOTE: Data file HC.ALLDATA_2025JUL.DATA is in a format that is native to another host, or the file
+      encoding does not match the session encoding. Cross Environment Data Access will be used, which
+      might require additional CPU resources and might reduce performance.
+349  run;
+
+NOTE: There were 4566 observations read from the data set HC.ALLDATA_2025JUL.
+NOTE: The data set WORK.ALL_DATA_2025JUL has 4566 observations and 93 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.29 seconds
+      cpu time            0.06 seconds
+
+
+350
+351
+352  PROC TABULATE DATA=All_data_&year.&quarter out=measure_volume0;
+NOTE: Writing HTML Body file: sashtml.htm
+353      var &measure_all;
+354
+355      table n*(&measure_all);
+356  RUN;
+
+NOTE: There were 4566 observations read from the data set WORK.ALL_DATA_2025JUL.
+NOTE: The data set WORK.MEASURE_VOLUME0 has 1 observations and 49 variables.
+NOTE: PROCEDURE TABULATE used (Total process time):
+      real time           0.94 seconds
+      cpu time            0.29 seconds
+
+
+357
+358  PROC TRANSPOSE data=Measure_volume0 out=measure_volume_t0;
+359  RUN;
+
+NOTE: There were 1 observations read from the data set WORK.MEASURE_VOLUME0.
+NOTE: The data set WORK.MEASURE_VOLUME_T0 has 48 observations and 3 variables.
+NOTE: PROCEDURE TRANSPOSE used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.01 seconds
+
+
+360
+361  DATA include_measure0  (drop=_NAME_ _LABEL_ rename = (COL1=freq));
+362      SET measure_volume_t0;
+363
+364      if _name_ ^= '_PAGE_'  and _name_^='_TABLE_';
+365      measure_in_name = tranwrd(_NAME_, '_N', '');
+366
+367      measure_in_std = 'std_'||trim(measure_in_name);
+368
+369  RUN;
+
+NOTE: There were 48 observations read from the data set WORK.MEASURE_VOLUME_T0.
+NOTE: The data set WORK.INCLUDE_MEASURE0 has 46 observations and 3 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.04 seconds
+      cpu time            0.01 seconds
+
+
+370
+371  PROC SQL;
+372      select measure_in_name into: measure_in separated by '' notrim
+373      from include_measure0;
+374  QUIT;
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.00 seconds
+
+
+375  %put &measure_in;
+MORT_30_AMI
+
+MORT_30_CABG
+
+MORT_30_COPD
+
+MORT_30_HF
+
+MORT_30_PN
+
+MORT_30_STK
+
+PSI_4_SURG_COMP
+
+COMP_HIP_KNEE
+
+HAI_1
+
+HAI_2
+
+HAI_3
+
+HAI_4
+
+HAI_5
+
+HAI_6
+
+PSI_90_SAFETY
+
+EDAC_30_AMI
+
+EDAC_30_HF
+
+EDAC_30_PN
+
+OP_32
+
+READM_30_CABG
+
+READM_30_COPD
+
+READM_30_HIP_KNEE
+
+READM_30_HOSP_WIDE
+
+OP_35_ADM
+
+OP_35_ED
+
+OP_36
+
+H_COMP_1_STAR_RATING
+
+H_COMP_2_STAR_RATING
+
+H_COMP_3_STAR_RATING
+
+H_COMP_5_STAR_RATING
+
+H_COMP_6_STAR_RATING
+
+H_COMP_7_STAR_RATING
+
+H_GLOB_STAR_RATING
+
+H_INDI_STAR_RATING
+
+HCP_COVID_19
+
+IMM_3
+
+OP_10
+
+OP_13
+
+OP_18B
+
+OP_22
+
+OP_23
+
+OP_29
+
+OP_8
+
+PC_01
+
+SAFE_USE_OF_OPIOIDS
+
+SEP_1
+376
+377
+378  /* &measure_cnt: number of included measure */
+379  PROC SQL;
+380      select count(measure_in_name)
+381      into: measure_cnt
+382      from include_measure0;
+383  QUIT;
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+384  %put &measure_cnt;
+46
+385
+386
+387  /*COUNT # HOSPITALS PER MEASURE FOR ALL MEASURES*/
+388  PROC TABULATE DATA=All_data_&year.&quarter out=measure_volume;
+389      var &measure_all;
+390
+391      table n*(&measure_all);
+392  RUN;
+
+NOTE: There were 4566 observations read from the data set WORK.ALL_DATA_2025JUL.
+NOTE: The data set WORK.MEASURE_VOLUME has 1 observations and 49 variables.
+NOTE: PROCEDURE TABULATE used (Total process time):
+      real time           0.02 seconds
+      cpu time            0.01 seconds
+
+
+393
+394  PROC TRANSPOSE data=Measure_volume out=measure_volume_t;
+395  RUN;
+
+NOTE: There were 1 observations read from the data set WORK.MEASURE_VOLUME.
+NOTE: The data set WORK.MEASURE_VOLUME_T has 48 observations and 3 variables.
+NOTE: PROCEDURE TRANSPOSE used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+396
+397  /* IDENTIFY MEASURES WITH VOLUMN <=100 */
+398  DATA less100_measure  (drop=_NAME_ _LABEL_ rename = (COL1=freq));
+399      SET measure_volume_t (where = (col1<=100));
+400
+401      if _name_ ^= '_PAGE_'  and _name_^='_TABLE_';
+402      measure_name = tranwrd(_NAME_, '_N', '');
+403
+404  RUN;
+
+NOTE: There were 2 observations read from the data set WORK.MEASURE_VOLUME_T.
+      WHERE col1<=100;
+NOTE: The data set WORK.LESS100_MEASURE has 0 observations and 2 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+405  DATA R.less100_measure;SET less100_measure;RUN;
+
+NOTE: There were 0 observations read from the data set WORK.LESS100_MEASURE.
+NOTE: The data set R.LESS100_MEASURE has 0 observations and 2 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.07 seconds
+      cpu time            0.00 seconds
+
+
+405!                                                *0;
+406
+407  /* CREATE a measure list for count<=100 */
+408  PROC SQL;
+409      select measure_Name
+410      into: measure_exclude separated by '' notrim
+411      from Less100_measure;
+NOTE: No rows were selected.
+412  QUIT;
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+WARNING: Apparent symbolic reference MEASURE_EXCLUDE not resolved.
+413  %put &measure_exclude;
+&measure_exclude
+414
+415  DATA _null_;
+416      call symputx('NOBS',NOBS);
+417      set Less100_measure nobs=NOBS;
+418  RUN;
+
+NOTE: There were 0 observations read from the data set WORK.LESS100_MEASURE.
+NOTE: DATA statement used (Total process time):
+      real time           0.03 seconds
+      cpu time            0.00 seconds
+
+
+419  %put &=NOBS;
+NOBS=0
+420  *add NOBS variable in Year2025 because of empty 'Less100_measure'. So we can execute dropping
+420! &measure_exclude conditionally;
+421
+422  /* REMOVE MEASURES WHICH HAVE HOSPITAL COUNTS <=100*/
+423  DATA initial_data_&year.&quarter;
+424      SET All_data_&year.&quarter;
+425
+426      /* drop measure(s) with volume <=100*/
+427      %if &NOBS>0 %then %do;
+428          drop &measure_exclude;
+429      %end;
+430  RUN;
+
+NOTE: There were 4566 observations read from the data set WORK.ALL_DATA_2025JUL.
+NOTE: The data set WORK.INITIAL_DATA_2025JUL has 4566 observations and 93 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+431
+432  ************************************************************************
+433  * CREATE NEEDED MEASURE NAME LIST                                      *
+434  ************************************************************************;
+435  /* CREATE THE FINAL LISTS OF NAME OF INCLUDED MEASURES: &measure_in, &measure_in_std  */
+436  DATA include_measure  (drop=_NAME_ _LABEL_ rename = (COL1=freq));
+437      SET measure_volume_t (where = (col1>100));
+438
+439      if _name_ ^= '_PAGE_'  and _name_^='_TABLE_';
+440      measure_in_name = tranwrd(_NAME_, '_N', '');
+441
+442      measure_in_std = 'std_'||trim(measure_in_name);
+443
+444  RUN;
+
+NOTE: There were 46 observations read from the data set WORK.MEASURE_VOLUME_T.
+      WHERE col1>100;
+NOTE: The data set WORK.INCLUDE_MEASURE has 46 observations and 3 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+445
+446  PROC SQL;
+447      select measure_in_name into: measure_in separated by '' notrim
+448      from include_measure;
+449  QUIT;
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.01 seconds
+
+
+450  %put &measure_in;
+MORT_30_AMI
+
+MORT_30_CABG
+
+MORT_30_COPD
+
+MORT_30_HF
+
+MORT_30_PN
+
+MORT_30_STK
+
+PSI_4_SURG_COMP
+
+COMP_HIP_KNEE
+
+HAI_1
+
+HAI_2
+
+HAI_3
+
+HAI_4
+
+HAI_5
+
+HAI_6
+
+PSI_90_SAFETY
+
+EDAC_30_AMI
+
+EDAC_30_HF
+
+EDAC_30_PN
+
+OP_32
+
+READM_30_CABG
+
+READM_30_COPD
+
+READM_30_HIP_KNEE
+
+READM_30_HOSP_WIDE
+
+OP_35_ADM
+
+OP_35_ED
+
+OP_36
+
+H_COMP_1_STAR_RATING
+
+H_COMP_2_STAR_RATING
+
+H_COMP_3_STAR_RATING
+
+H_COMP_5_STAR_RATING
+
+H_COMP_6_STAR_RATING
+
+H_COMP_7_STAR_RATING
+
+H_GLOB_STAR_RATING
+
+H_INDI_STAR_RATING
+
+HCP_COVID_19
+
+IMM_3
+
+OP_10
+
+OP_13
+
+OP_18B
+
+OP_22
+
+OP_23
+
+OP_29
+
+OP_8
+
+PC_01
+
+SAFE_USE_OF_OPIOIDS
+
+SEP_1
+451
+452  PROC SQL;
+453      select measure_in_std into: measure_in_std separated by '' notrim
+454      from include_measure;
+455  QUIT;
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.01 seconds
+
+
+456
+457  PROC SQL;
+458      select count(measure_in_name)
+459      into: measure_cnt
+460      from include_measure;
+461  QUIT;
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+462  %put &measure_cnt;
+46
+463
+464
+465  /* CREATE THE FINAL LISTS OF EACH MEASURE GROUP AND REMOVE THOSE MEASURES WITH <= 100 HOSPITALS
+465! */
+466
+467  /* FINAL measuer list for outcome-mortality measure group: &measure_OM  - MUST CHANGE WHEN NEW
+467! MEASURE ADDED/REMOVED*/
+468  DATA outcomes_mortality (where = (col1>100));
+469      SET measure_volume_t;
+470
+471      if _name_ ^= '_PAGE_'  and _name_^='_TABLE_';
+472      measure_in_name = tranwrd(_NAME_, '_N', '');
+473
+474      measure_in_std = 'std_'||trim(measure_in_name);
+475
+476      /*** Here are ALL 7 Mortality measures ***/
+477      if measure_in_name in /*- MUST CHECK NEXT LINE AND UPDATE FOR EACH QUARTER DATA IF NEW
+477! MEASURE ADDED/REMOVED IN THIS QUARTER*/
+478      ('MORT_30_AMI', 'MORT_30_CABG', 'MORT_30_COPD', 'MORT_30_HF', 'MORT_30_PN', 'MORT_30_STK',
+478! 'PSI_4_SURG_COMP');
+479  RUN;
+
+NOTE: There were 48 observations read from the data set WORK.MEASURE_VOLUME_T.
+NOTE: The data set WORK.OUTCOMES_MORTALITY has 7 observations and 5 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+480
+481  PROC SQL;
+482      select measure_in_std
+483      into: measure_OM separated by '' notrim
+484      from outcomes_mortality;
+485  QUIT;
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.01 seconds
+
+
+486  %put &measure_OM;
+std_MORT_30_AMI
+
+std_MORT_30_CABG
+
+std_MORT_30_COPD
+
+std_MORT_30_HF
+
+std_MORT_30_PN
+
+std_MORT_30_STK
+
+std_PSI_4_SURG_COMP
+487
+488
+489  /* FINAL measuer list for outcome-safety measure group: &measure_OS  */
+490  DATA outcomes_safety  (where = (col1>100));
+491      SET measure_volume_t;
+492
+493      if _name_ ^= '_PAGE_'  and _name_^='_TABLE_';
+494      measure_in_name = tranwrd(_NAME_, '_N', '');
+495
+496      measure_in_std = 'std_'||trim(measure_in_name);
+497
+498      /*** Here are ALL 8 SAFETY measures ***/
+499      if measure_in_name in /*- MUST CHECK NEXT LINE AND UPDATE FOR EACH QUARTER DATA IF NEW
+499! MEASURE ADDED/REMOVED IN THIS QUARTER*/
+500      ('COMP_HIP_KNEE',  'HAI_1', 'HAI_2', 'HAI_3', 'HAI_4', 'HAI_5', 'HAI_6', 'PSI_90_SAFETY');
+501  RUN;
+
+NOTE: There were 48 observations read from the data set WORK.MEASURE_VOLUME_T.
+NOTE: The data set WORK.OUTCOMES_SAFETY has 8 observations and 5 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+502
+503  PROC SQL;
+504      select measure_in_std  into: measure_OS separated by '' notrim
+505      from outcomes_safety;
+506  QUIT;
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+507  %put &measure_OS;
+std_COMP_HIP_KNEE
+
+std_HAI_1
+
+std_HAI_2
+
+std_HAI_3
+
+std_HAI_4
+
+std_HAI_5
+
+std_HAI_6
+
+std_PSI_90_SAFETY
+508
+509
+510  /* FINAL measuer list for outcome-readmission measure group: &measure_OR  */
+511  DATA outcomes_readmission (where = (col1>100));
+512      SET measure_volume_t;
+513
+514      if _name_ ^= '_PAGE_'  and _name_^='_TABLE_';
+515      measure_in_name = tranwrd(_NAME_, '_N', '');
+516
+517      measure_in_std = 'std_'||trim(measure_in_name);
+518
+519      /*** Here are ALL 11 READMISSION measures ***/
+520      if measure_in_name in /*- MUST CHECK NEXT LINE AND UPDATE FOR EACH QUARTER DATA IF NEW
+520! MEASURE ADDED/REMOVED IN THIS QUARTER*/
+521      ('EDAC_30_AMI', 'EDAC_30_HF', 'EDAC_30_PN', 'OP_32','READM_30_CABG', 'READM_30_COPD',
+521! 'READM_30_HIP_KNEE',
+522      'READM_30_HOSP_WIDE', 'OP_35_ADM', 'OP_35_ED', 'OP_36');
+523  RUN;
+
+NOTE: There were 48 observations read from the data set WORK.MEASURE_VOLUME_T.
+NOTE: The data set WORK.OUTCOMES_READMISSION has 11 observations and 5 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+524
+525  PROC SQL;
+526      select measure_in_std
+527      into: measure_OR separated by '' notrim
+528      from outcomes_readmission;
+529  QUIT;
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+530  %put &measure_OR;
+std_EDAC_30_AMI
+
+std_EDAC_30_HF
+
+std_EDAC_30_PN
+
+std_OP_32
+
+std_READM_30_CABG
+
+std_READM_30_COPD
+
+std_READM_30_HIP_KNEE
+
+std_READM_30_HOSP_WIDE
+
+std_OP_35_ADM
+
+std_OP_35_ED
+
+std_OP_36
+531
+532  /* FINAL measuer list for patient experience measure group: &measure_PtExp */
+533  DATA PtExp (where = (col1>100));
+534      SET measure_volume_t;
+535
+536      if _name_ ^= '_PAGE_'  and _name_^='_TABLE_';
+537      measure_in_name = tranwrd(_NAME_, '_N', '');
+538
+539      measure_in_std = 'std_'||trim(measure_in_name);
+540
+541      /*** Here are ALL 8 PATIENT EXPERIENCE measures  ***/
+542      if measure_in_name in /*- MUST CHECK NEXT LINE AND UPDATE FOR EACH QUARTER DATA IF NEW
+542! MEASURE ADDED/REMOVED IN THIS QUARTER*/
+543      ('H_COMP_1_STAR_RATING', 'H_COMP_2_STAR_RATING', 'H_COMP_3_STAR_RATING',
+543! 'H_COMP_5_STAR_RATING', 'H_COMP_6_STAR_RATING',
+544      'H_COMP_7_STAR_RATING', 'H_GLOB_STAR_RATING', 'H_INDI_STAR_RATING');
+545  RUN;
+
+NOTE: There were 48 observations read from the data set WORK.MEASURE_VOLUME_T.
+NOTE: The data set WORK.PTEXP has 8 observations and 5 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.01 seconds
+
+
+546
+547  PROC SQL;
+548      select measure_in_std
+549      into: measure_PtExp separated by '' notrim
+550      from PtExp;
+551  QUIT;
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.01 seconds
+
+
+552  %put &measure_PtExp;
+std_H_COMP_1_STAR_RATING
+
+std_H_COMP_2_STAR_RATING
+
+std_H_COMP_3_STAR_RATING
+
+std_H_COMP_5_STAR_RATING
+
+std_H_COMP_6_STAR_RATING
+
+std_H_COMP_7_STAR_RATING
+
+std_H_GLOB_STAR_RATING
+
+std_H_INDI_STAR_RATING
+553
+554
+555
+556  /* FINAL measuer list for Timely and Effective Care group: &measure_Process */
+557
+558  DATA Process (where = (col1>100));
+559      SET measure_volume_t;
+560
+561      if _name_ ^= '_PAGE_'  and _name_^='_TABLE_';
+562      measure_in_name = tranwrd(_NAME_, '_N', '');
+563
+564      measure_in_std = 'std_'||trim(measure_in_name);
+565
+566      /*** Here are ALL 13Process measures ***/
+567      if measure_in_name in /*- MUST CHECK NEXT LINE AND UPDATE FOR EACH QUARTER DATA IF NEW
+567! MEASURE ADDED/REMOVED IN THIS QUARTER*/
+568
+569      ('HCP_COVID_19', 'IMM_3', 'OP_10', 'OP_13', 'OP_18B', /*'OP_2',*/ 'OP_22', 'OP_23', 'OP_29',
+569! /*'OP_3B',*/  'OP_8', 'PC_01',
+570  'SAFE_USE_OF_OPIOIDS', 'SEP_1');
+571  RUN;
+
+NOTE: There were 48 observations read from the data set WORK.MEASURE_VOLUME_T.
+NOTE: The data set WORK.PROCESS has 12 observations and 5 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.01 seconds
+
+
+572
+573
+574  PROC SQL;
+575      select measure_in_std
+576      into: measure_Process separated by '' notrim
+577      from Process;
+578  QUIT;
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.01 seconds
+
+
+579  %put &measure_Process;
+std_HCP_COVID_19
+
+std_IMM_3
+
+std_OP_10
+
+std_OP_13
+
+std_OP_18B
+
+std_OP_22
+
+std_OP_23
+
+std_OP_29
+
+std_OP_8
+
+std_PC_01
+
+std_SAFE_USE_OF_OPIOIDS
+
+std_SEP_1
+580
+581  ******************************************************************
+582  * REMOVE HOSPITALS WHICH DO NOT HAVE ANY FINAL INCLUDED MEASURES *
+583  ******************************************************************;
+584
+585  %keep_hos(Initial_data_&year.&quarter.,&measure_in,&measure_cnt);
+
+NOTE: There were 4566 observations read from the data set WORK.INITIAL_DATA_2025JUL.
+NOTE: The data set WORK.INITIAL_DATA_2025JUL has 4566 observations and 94 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+586
+587
+588  **************************************************************
+589  **Add an output file for mean and standard deviation of measure scores
+590  **************************************************************;
+591  proc means data=Initial_data_&year.&quarter;
+592      var &measure_in;
+593      output out=&MEASURE_MEAN;
+594  run;
+
+NOTE: There were 4566 observations read from the data set WORK.INITIAL_DATA_2025JUL.
+NOTE: The data set R.MEASURE_AVERAGE_STDDEV_2025JUL has 5 observations and 49 variables.
+NOTE: PROCEDURE MEANS used (Total process time):
+      real time           0.09 seconds
+      cpu time            0.03 seconds
+
+
+595
+596
+597
+598
+599  ******************************
+600  * Standardize Measure Scores *
+601  ******************************;
+602  PROC STANDARD data=Initial_data_&year.&quarter mean=0 std=1 out=Std_data_&year.&quarter;
+603      var &measure_in;
+604  run;
+
+NOTE: The data set WORK.STD_DATA_2025JUL has 4566 observations and 94 variables.
+NOTE: PROCEDURE STANDARD used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+605
+606  **********************
+607  * RE-DIRECT MEASURES *
+608  **********************;
+609  DATA Std_data_&year.&quarter;
+610      SET Std_data_&year.&quarter;
+611
+612      /* flip measures which have negative direction, so all measures are in the same direction
+613         and a higher score means better
+614         -- MUST CHECK AND UPDATE IF MEASURES ARE REMOVED, OR MEASURES ARE ADDED AND NEED TO BE
+614! FLIPPED IN NEW QUARTERS*/
+615
+616      MORT_30_AMI = -MORT_30_AMI;
+617      MORT_30_CABG = -MORT_30_CABG;
+618      MORT_30_COPD = -MORT_30_COPD;
+619      MORT_30_HF = -MORT_30_HF;
+620      MORT_30_PN = -MORT_30_PN;
+621      MORT_30_STK = -MORT_30_STK;
+622      PSI_4_SURG_COMP = -PSI_4_SURG_COMP;
+623
+624      COMP_HIP_KNEE = -COMP_HIP_KNEE;
+625      HAI_1= -HAI_1;
+626      HAI_2= -HAI_2;
+627      HAI_3= -HAI_3;
+628      HAI_4= -HAI_4;
+629      HAI_5= -HAI_5;
+630      HAI_6= -HAI_6;
+631      PSI_90_SAFETY = -PSI_90_SAFETY;
+632
+633      EDAC_30_AMI = -EDAC_30_AMI;
+634      EDAC_30_HF  = -EDAC_30_HF;
+635      EDAC_30_PN = -EDAC_30_PN;
+636      OP_32 = -OP_32;
+637      READM_30_CABG = -READM_30_CABG;
+638      READM_30_COPD = -READM_30_COPD;
+639      READM_30_HIP_KNEE = -READM_30_HIP_KNEE;
+640      READM_30_HOSP_WIDE = -READM_30_HOSP_WIDE;
+641      OP_35_ADM= -OP_35_ADM;
+642      OP_35_ED= -OP_35_ED;
+643      OP_36= -OP_36;
+644
+645      OP_22 = -OP_22;
+646      PC_01 = - PC_01;
+647
+648      *OP_3B = -OP_3B;*OP_3B is removed in Year 2025;
+649      OP_18B = -OP_18B;
+650
+651      OP_8 = -OP_8;
+652      OP_10 = -OP_10;
+653      OP_13 = -OP_13;
+654      SAFE_USE_OF_OPIOIDS=-SAFE_USE_OF_OPIOIDS;*SAFE_USE_OF_OPIOIDS is added in Year 2025;
+655  RUN;
+
+NOTE: Missing values were generated as a result of performing an operation on missing values.
+      Each place is given by: (Number of times) at (Line):(Column).
+      2564 at 616:20   3677 at 617:21   1919 at 618:21   1423 at 619:19   937 at 620:19
+      2353 at 621:20   2997 at 622:24   2838 at 624:22   2587 at 625:13   2314 at 626:13
+      2778 at 627:13   3919 at 628:13   2857 at 629:13   1613 at 630:13   1610 at 631:22
+      2981 at 633:20   1373 at 634:20   935 at 635:19    1429 at 636:14   3679 at 637:22
+      1878 at 638:22   2770 at 639:26   316 at 640:27    3061 at 641:17   3061 at 642:16
+      1766 at 643:13   689 at 645:14    2304 at 646:15   533 at 649:15    3836 at 651:13
+      643 at 652:14    2666 at 653:14   844 at 654:26
+NOTE: There were 4566 observations read from the data set WORK.STD_DATA_2025JUL.
+NOTE: The data set WORK.STD_DATA_2025JUL has 4566 observations and 94 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.02 seconds
+      cpu time            0.03 seconds
+
+
+656
+657
+658
+659  /* OUTPUTS OF 'std_data_2025Jul_analysis' ARE GENERATED*/
+660  DATA &MEASURE_ANALYSIS (drop=i &measure_in);
+661      SET Std_data_&year.&quarter;
+662
+663      ARRAY M(&measure_cnt) &measure_in;
+664
+665      ARRAY Y(&measure_cnt) &measure_in_std;
+666
+667      DO I =1 TO &measure_cnt;
+668         Y[I] = m[I];
+669      END;
+670  run;
+
+NOTE: There were 4566 observations read from the data set WORK.STD_DATA_2025JUL.
+NOTE: The data set R.STD_DATA_2025JUL_ANALYSIS has 4566 observations and 94 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.05 seconds
+      cpu time            0.01 seconds
+
+
+671
+672
+673
+674  /*Continue to "1 - First stage_Simple Average of Measure Scores_2025Jul" SAS progam*/
+
+675  *Note: it takes less than 5 minutes to run this program;
+676  *****************************************************************;
+677  * FIRST STAGE -                                                 *;
+678  * DERIVING GROUP SCORE FOR EACH MEASURE TYPE GROUP              *;
+679  *                                                               *;
+680  * SAS 9.4 WIN                                                   *;
+681  *                                                               *;
+682  * YALE CORE                                                     *;
+683  *                                                               *;
+684  * For questions, please submit an inquiry to                    *;
+685  * the QualityNet Question & Answer Tool at:                     *;
+686  * https://cmsqualitysupport.service-now.com/qnet_qa             *;
+687  *****************************************************************;
+688
+689  /*This program is used to calulate the 5 groups(domains) scores for
+690    each hospital.
+691    The 5 groups(domains) are:
+692    (1)Mortality
+693    (2)Safety of Care
+694    (3)Readmission
+695    (4)Patient Experience
+696    (5)Timely and Effective Care
+697    The 5 groups(domains) scores of each hospitals will be used in program 2
+698    to derive the hospital star ratings.
+699  */
+700
+701  ******************************************
+702  * Outcomes - Mortality                   *
+703  ******************************************;
+704  *option mprint;
+705  /* count number of measures in Outcome Mortality Group */
+706  PROC SQL;
+707      select count(measure_in_name)
+708      into: measure_OM_cnt /*number of measures in this domain*/
+709      from Outcomes_mortality;
+709!                             /*Outcomes_mortality is generated from the SAS program '0 - Data and
+709! Measure Standardization_2025Jul'*/
+710  QUIT;
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.01 seconds
+
+
+711
+712
+713  /*OM is used to define the data name for mortality Group;
+714  &measure_OM is the measures in Mortality Group;
+715  &measure_OM_cnt is the number of measures in this Group;*/
+716  /*output group score in R.Outcome_mortality*/
+717  %grp_score(&MEASURE_ANALYSIS, OM, &measure_OM, &measure_OM_cnt,R.Outcome_mortality);
+
+NOTE: There were 4566 observations read from the data set R.STD_DATA_2025JUL_ANALYSIS.
+NOTE: The data set WORK.DAT0 has 4566 observations and 18 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.02 seconds
+      cpu time            0.01 seconds
+
+
+
+NOTE: The data set WORK.DAT1 has 4566 observations and 18 variables.
+NOTE: PROCEDURE STANDARD used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.01 seconds
+
+
+
+NOTE: The data set WORK.NEW has 1 observations and 2 variables.
+NOTE: There were 4566 observations read from the data set WORK.DAT0.
+NOTE: PROCEDURE MEANS used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+NOTE: The execution of this query involves performing one or more Cartesian product joins that can
+      not be optimized.
+NOTE: Table WORK.DAT2 created, with 4566 rows and 20 columns.
+
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.03 seconds
+      cpu time            0.01 seconds
+
+
+
+NOTE: There were 4566 observations read from the data set WORK.DAT2.
+NOTE: There were 4566 observations read from the data set WORK.DAT1.
+NOTE: The data set R.OUTCOME_MORTALITY has 4566 observations and 21 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.05 seconds
+      cpu time            0.01 seconds
+
+
+718
+719
+720  ***************************************
+721  * Outcomes - Safety of Care           *
+722  ***************************************;
+723
+724  /* count number of measures in Outcome Safety Group */
+725  PROC SQL;
+726      select count(measure_in_name)
+727      into: measure_OS_cnt
+728      from Outcomes_safety;
+728!                          /*Outcomes_safety is generated from the SAS program '0 - Data and
+728! Measure Standardization_2025Jul'*/
+729  QUIT;
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+730
+731  /*OS is used to define the data name for Safety Group;
+732  &measure_OS is the measures in Safety Group;
+733  &measure_OS_cnt is the number of measures in Safety Group;*/
+734  /*output group score in R.Outcome_safety */
+735  %grp_score(&MEASURE_ANALYSIS, OS, &measure_OS,  &measure_OS_cnt, R.Outcome_safety);
+
+NOTE: There were 4566 observations read from the data set R.STD_DATA_2025JUL_ANALYSIS.
+NOTE: The data set WORK.DAT0 has 4566 observations and 20 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+
+NOTE: The data set WORK.DAT1 has 4566 observations and 20 variables.
+NOTE: PROCEDURE STANDARD used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+
+NOTE: The data set WORK.NEW has 1 observations and 2 variables.
+NOTE: There were 4566 observations read from the data set WORK.DAT0.
+NOTE: PROCEDURE MEANS used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+NOTE: The execution of this query involves performing one or more Cartesian product joins that can
+      not be optimized.
+NOTE: Table WORK.DAT2 created, with 4566 rows and 22 columns.
+
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.01 seconds
+
+
+
+NOTE: There were 4566 observations read from the data set WORK.DAT2.
+NOTE: There were 4566 observations read from the data set WORK.DAT1.
+NOTE: The data set R.OUTCOME_SAFETY has 4566 observations and 23 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.02 seconds
+      cpu time            0.01 seconds
+
+
+736
+737
+738  ********************************************
+739  * Outcomes - Readmission                   *
+740  ********************************************;
+741
+742  /* count number of measures in Outcome Readmission Group */
+743  PROC SQL;
+744      select count(measure_in_name)
+745      into: measure_OR_cnt
+746      from Outcomes_readmission;
+746!                               /*Outcomes_readmission is generated from the SAS program '0 - Data
+746! and Measure Standardization_2025Jul'*/
+747  QUIT;
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.01 seconds
+
+
+748
+749
+750  /*OR is used to define the data name for Readmission Group;
+751  &measure_OR is the measures in Readmission Group;
+752  &measure_OR_cnt is the number of measures in Readmission Group;*/
+753  /*output group score in R.Outcome_readmission*/
+754  %grp_score(&MEASURE_ANALYSIS, OR, &measure_OR, &measure_OR_cnt, R.Outcome_readmission);
+754! ************;
+
+NOTE: There were 4566 observations read from the data set R.STD_DATA_2025JUL_ANALYSIS.
+NOTE: The data set WORK.DAT0 has 4566 observations and 26 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.00 seconds
+
+
+
+NOTE: The data set WORK.DAT1 has 4566 observations and 26 variables.
+NOTE: PROCEDURE STANDARD used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+
+NOTE: The data set WORK.NEW has 1 observations and 2 variables.
+NOTE: There were 4566 observations read from the data set WORK.DAT0.
+NOTE: PROCEDURE MEANS used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+NOTE: The execution of this query involves performing one or more Cartesian product joins that can
+      not be optimized.
+NOTE: Table WORK.DAT2 created, with 4566 rows and 28 columns.
+
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+
+NOTE: There were 4566 observations read from the data set WORK.DAT2.
+NOTE: There were 4566 observations read from the data set WORK.DAT1.
+NOTE: The data set R.OUTCOME_READMISSION has 4566 observations and 29 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.02 seconds
+      cpu time            0.01 seconds
+
+
+755
+756
+757
+758
+759  ******************************************
+760  *  Patient Experience                    *
+761  ******************************************;
+762
+763  /* count number of measures in Patient Experience Group */
+764  PROC SQL;
+765      select count(measure_in_name)
+766      into: measure_PtExp_cnt
+767      from Ptexp;
+767!                /*Ptexp is generated from the SAS program '0 - Data and Measure
+767! Standardization_2025Jul'*/
+768  QUIT;
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+769
+770
+771  /*PtExp is used to define the data name for Patient Experience Group;
+772  &measure_PtExp is the measures in Patient Experience Group;
+773  &measure_PtExp_cnt is the number of measures in Patient Experience Group;*/
+774  /*output group score in R.PtExp*/
+775  %grp_score(&MEASURE_ANALYSIS, PtExp, &measure_PtExp,  &measure_PtExp_cnt,R.PtExp);
+
+NOTE: There were 4566 observations read from the data set R.STD_DATA_2025JUL_ANALYSIS.
+NOTE: The data set WORK.DAT0 has 4566 observations and 20 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.00 seconds
+
+
+
+NOTE: The data set WORK.DAT1 has 4566 observations and 20 variables.
+NOTE: PROCEDURE STANDARD used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+
+NOTE: The data set WORK.NEW has 1 observations and 2 variables.
+NOTE: There were 4566 observations read from the data set WORK.DAT0.
+NOTE: PROCEDURE MEANS used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+NOTE: The execution of this query involves performing one or more Cartesian product joins that can
+      not be optimized.
+NOTE: Table WORK.DAT2 created, with 4566 rows and 22 columns.
+
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+
+NOTE: There were 4566 observations read from the data set WORK.DAT2.
+NOTE: There were 4566 observations read from the data set WORK.DAT1.
+NOTE: The data set R.PTEXP has 4566 observations and 23 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.02 seconds
+      cpu time            0.01 seconds
+
+
+776
+777
+778
+779  **********************************************
+780  * Timely and Effective Care                  *
+781  **********************************************;
+782
+783  /* count number of measures in Timely and Effective Care */
+784  PROC SQL;
+785      select count(measure_in_name)
+786      into: measure_Process_cnt
+787      from Process;
+787!                  /*Process is generated from the SAS program '0 - Data and Measure
+787! Standardization_2025Jul'*/
+788  QUIT;
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.01 seconds
+
+
+789
+790
+791  /*Process is used to define the data name for Timely and Effective Care group;
+792  &measure_Process is the measures in Timely and Effective Care Group;
+793  &measure_Process_cnt is the number of measures in Timely and Effective Care;*/
+794  /*output group score in R.Process*/
+795  %grp_score(&MEASURE_ANALYSIS, Process, &measure_Process,  &measure_Process_cnt, R.Process);
+
+NOTE: There were 4566 observations read from the data set R.STD_DATA_2025JUL_ANALYSIS.
+NOTE: The data set WORK.DAT0 has 4566 observations and 28 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+
+NOTE: The data set WORK.DAT1 has 4566 observations and 28 variables.
+NOTE: PROCEDURE STANDARD used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.01 seconds
+
+
+
+NOTE: The data set WORK.NEW has 1 observations and 2 variables.
+NOTE: There were 4566 observations read from the data set WORK.DAT0.
+NOTE: PROCEDURE MEANS used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+NOTE: The execution of this query involves performing one or more Cartesian product joins that can
+      not be optimized.
+NOTE: Table WORK.DAT2 created, with 4566 rows and 30 columns.
+
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.01 seconds
+
+
+
+NOTE: There were 4566 observations read from the data set WORK.DAT2.
+NOTE: There were 4566 observations read from the data set WORK.DAT1.
+NOTE: The data set R.PROCESS has 4566 observations and 31 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.02 seconds
+      cpu time            0.00 seconds
+
+
+796
+797
+798
+799
+800
+801  /*Continue to "2 - Second Stage_Weighted Average and Categorize Star_2025Jul" SAS progam*/
+
+802  *Note: it takes less than 5 minutes to run this program;
+803  *****************************************************************;
+804  * SECOND STAGE -                                                *;
+805  * DERIVING SUMMARY SCORE AND STAR RATING                        *;
+806  *                                                               *;
+807  * SAS 9.4 WIN                                                   *;
+808  *                                                               *;
+809  * YALE CORE                                                     *;
+810  *                                                               *;
+811  * For questions, please submit an inquiry to                    *;
+812  * the QualityNet Question & Answer Tool at:                     *;
+813  * https://cmsqualitysupport.service-now.com/qnet_qa             *;
+814  *****************************************************************;
+815
+816  /*This program is used to derive the hospital stars. The summary
+817    score of each hospital is calculated based on the hospital's
+818    group(domain) scores which are output from program 1. Then
+819    the K-means approach is used to derive the hospital star ratings.
+820  */
+821
+822  /* put all group scores into one file */
+823  data all;
+824      merge  R.Outcome_mortality(keep=provider_id grp_score rename
+824! =grp_score=Std_Outcomes_Mortality_score)
+825             R.Outcome_readmission(keep = provider_id grp_score rename =
+825! grp_score=Std_Outcomes_Readmission_score)
+826             R.Outcome_safety(keep=provider_id grp_score rename
+826! =grp_score=Std_Outcomes_Safety_score)
+827             R.Ptexp(keep = provider_id grp_score rename = grp_score=Std_PatientExp_score)
+828             R.Process(keep=provider_id grp_score rename = grp_score=Std_Process_score);
+829      by provider_id;
+830  run;
+
+NOTE: There were 4566 observations read from the data set R.OUTCOME_MORTALITY.
+NOTE: There were 4566 observations read from the data set R.OUTCOME_READMISSION.
+NOTE: There were 4566 observations read from the data set R.OUTCOME_SAFETY.
+NOTE: There were 4566 observations read from the data set R.PTEXP.
+NOTE: There were 4566 observations read from the data set R.PROCESS.
+NOTE: The data set WORK.ALL has 4566 observations and 6 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.04 seconds
+      cpu time            0.01 seconds
+
+
+831
+832
+833
+834  *********************************************************
+835  *  CALCULATING SUMMARY SCORES BASED ON WEIGHTED AVERAGE *
+836  * 1) fixed standard weights from CMS                    *
+837  * 2) redistribute weights when there is missing group   *
+838  *                                                       *
+839  *********************************************************;
+840
+841  data summary_score (drop=I1-I5 w1-w5 grp_score1-grp_score5 k sum_weight_ave1-sum_weight_ave5);
+842      set all;
+843
+844      array std_weight(5) std_weight_PatientExperience std_weight_Readmission std_weight_Mortality
+844! std_weight_safety
+845                         std_weight_Process;
+846
+847      array w(5) w1-w5;
+848
+849      array weight(5) weight_PatientExperience weight_Outcomes_Readmission
+849! weight_Outcomes_Mortality
+850                      weight_Outcomes_Safety weight_Process;
+851
+852      array score(5)   Std_PatientExp_score Std_Outcomes_Readmission_score
+852! Std_Outcomes_Mortality_score
+853                      Std_Outcomes_Safety_score Std_Process_score;
+854
+855      array grp_score(5) grp_score1-grp_score5;
+856
+857      array I(5) I1 I2 I3 I4 I5 ;
+858
+859      array sum_weight_ave(5) sum_weight_ave1 sum_weight_ave2 sum_weight_ave3 sum_weight_ave4
+860                              sum_weight_ave5;
+861
+862
+863      /* fixed standard weights from CMS */;
+864      std_weight_PatientExperience = 0.22;
+865      std_weight_Readmission = 0.22;
+866      std_weight_Mortality = 0.22;
+867      std_weight_safety = 0.22;
+868      std_weight_Process = 0.12;
+869
+870      /* create indicator for missing group*/
+871      do k=1 to 5;
+872      w[k]= std_weight[k];
+873      grp_score[k]=score[k];
+874
+875      if grp_score[k] =. then I[k]=1;
+876         else I[k]=0;
+877      end;
+878
+879      /* Redistribute weights when there is missing group. For details, please refer to technical
+879! report. */
+880      /*For example, the group of Safety is missing, the weight for Mortality groups is changed
+881      from 22/100 to 22/78, the weight for Timely and Effective Care is changed from 12/100 to
+881! 12/78.*/
+882      do k=1 to 5;
+883      if grp_score[k] =. then weight[k]=.;
+884         else weight[k]=W[k]/(1-I1*W1-I2*W2-I3*W3-I4*W4-I5*W5);
+885      end;
+886
+887      do k=1 to 5;
+888      if weight[k] =. then sum_weight_ave[k]=0;
+889          else sum_weight_ave[k]=weight[k]*score[k];
+890      end;
+891
+892      /* summary scores */
+893      summary_score = sum (of sum_weight_ave1-sum_weight_ave5);
+894  run;
+
+NOTE: There were 4566 observations read from the data set WORK.ALL.
+NOTE: The data set WORK.SUMMARY_SCORE has 4566 observations and 17 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.02 seconds
+      cpu time            0.01 seconds
+
+
+895
+896
+897  *************************************************************************************************
+897! *********
+898  ** reporting criteria - minimum 3 measures/per group and 3 groups with one of which must be
+898! Safety or mortality to receive a Star*
+899  *************************************************************************************************
+899! *********;
+900  %report(&MEASURE_ANALYSIS, report_indicator, &measure_OM_cnt, &measure_OS_cnt, &measure_OR_cnt,
+900! &measure_PtExp_cnt,
+901          &measure_Process_cnt);
+
+NOTE: There were 4566 observations read from the data set R.STD_DATA_2025JUL_ANALYSIS.
+NOTE: The data set WORK.REPORT_INDICATOR has 4566 observations and 9 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.02 seconds
+      cpu time            0.01 seconds
+
+
+902
+903  /* add reporting indicator and number of measure per measure group to Star output file */
+904  proc sort data=summary_score out=summary_score1;
+905      by provider_id;
+906  run;
+
+NOTE: There were 4566 observations read from the data set WORK.SUMMARY_SCORE.
+NOTE: The data set WORK.SUMMARY_SCORE1 has 4566 observations and 17 variables.
+NOTE: PROCEDURE SORT used (Total process time):
+      real time           0.03 seconds
+      cpu time            0.00 seconds
+
+
+907
+908  proc sort data=report_indicator;
+909      by provider_id;
+910  run;
+
+NOTE: There were 4566 observations read from the data set WORK.REPORT_INDICATOR.
+NOTE: The data set WORK.REPORT_INDICATOR has 4566 observations and 9 variables.
+NOTE: PROCEDURE SORT used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.01 seconds
+
+
+911
+912  data summary_score21;
+913      merge summary_score1 report_indicator;
+914      by provider_id;
+915  run;
+
+NOTE: There were 4566 observations read from the data set WORK.SUMMARY_SCORE1.
+NOTE: There were 4566 observations read from the data set WORK.REPORT_INDICATOR.
+NOTE: The data set WORK.SUMMARY_SCORE21 has 4566 observations and 25 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.01 seconds
+
+
+916
+917  /*define peer grouping based on # of groups*/
+918  data summary_score22;
+919      set summary_score21;
+920      if report_indicator=1;*for those meeting report criteria;
+921
+922      total_grp=(Outcomes_Mortality_cnt>=3)  + (Outcomes_safety_cnt>=3)+
+922! (Outcomes_Readmission_cnt>=3)
+923      +(Patient_Experience_cnt>=3) +(Process_cnt>=3) ;
+924
+925      if Total_measure_group_cnt=3 then cnt_grp='1) # of groups=3       ';
+926      if Total_measure_group_cnt=4 then cnt_grp='2) # of groups=4       ';
+927      if Total_measure_group_cnt=5 then cnt_grp='3) # of groups=5       ';
+928  run;
+
+NOTE: There were 4566 observations read from the data set WORK.SUMMARY_SCORE21.
+NOTE: The data set WORK.SUMMARY_SCORE22 has 2891 observations and 27 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.01 seconds
+
+
+929
+930
+931
+932  ***********************************
+933  * Generate Star Rating by K-Means for each peer grouping*
+934  ***********************************;
+935  data cnt_s10;
+936      set summary_score22;
+937      if cnt_grp='1) # of groups=3       ';
+938  run;
+
+NOTE: There were 2891 observations read from the data set WORK.SUMMARY_SCORE22.
+NOTE: The data set WORK.CNT_S10 has 141 observations and 27 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+939  %kmeans(in=cnt_s10, out=cnt_s1,grp=cnt_grp);
+
+NOTE: There were 141 observations read from the data set WORK.CNT_S10.
+NOTE: The data set WORK.SUMMARY_SCORE2 has 141 observations and 27 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+
+NOTE: The data set WORK.S1 has 1 observations and 5 variables.
+NOTE: PROCEDURE UNIVARIATE used (Total process time):
+      real time           0.02 seconds
+      cpu time            0.01 seconds
+
+
+
+NOTE: There were 141 observations read from the data set WORK.SUMMARY_SCORE2.
+NOTE: There were 1 observations read from the data set WORK.S1.
+NOTE: The data set WORK.S2 has 141 observations and 7 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.01 seconds
+
+
+NOTE: The data set WORK.S3 has 5 observations and 3 variables.
+NOTE: There were 141 observations read from the data set WORK.S2.
+NOTE: PROCEDURE MEANS used (Total process time):
+      real time           0.49 seconds
+      cpu time            0.01 seconds
+
+
+NOTE: There were 5 observations read from the data set WORK.S3.
+NOTE: The data set WORK.S33 has 5 observations and 4 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+NOTE: Convergence criterion is satisfied.
+NOTE: The data set WORK.CSTATUS has 1 observations and 2 variables.
+NOTE: The data set WORK.SEEDS2 has 5 observations and 2 variables.
+NOTE: There were 5 observations read from the data set WORK.S33.
+NOTE: PROCEDURE FASTCLUS used (Total process time):
+      real time           0.05 seconds
+      cpu time            0.01 seconds
+
+
+NOTE: There were 1 observations read from the data set WORK.CSTATUS.
+NOTE: PROCEDURE PRINT used (Total process time):
+      real time           0.03 seconds
+      cpu time            0.00 seconds
+
+
+NOTE: Convergence criterion is satisfied.
+NOTE: The data set WORK.CSTATUS2 has 1 observations and 2 variables.
+NOTE: The data set WORK.CLUSTER_MEAN has 5 observations and 2 variables.
+NOTE: There were 5 observations read from the data set WORK.SEEDS2.
+NOTE: The data set WORK.CLUSTERS has 141 observations and 29 variables.
+NOTE: PROCEDURE FASTCLUS used (Total process time):
+      real time           0.02 seconds
+      cpu time            0.01 seconds
+
+
+NOTE: There were 1 observations read from the data set WORK.CSTATUS2.
+NOTE: PROCEDURE PRINT used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+
+NOTE: There were 5 observations read from the data set WORK.CLUSTER_MEAN.
+NOTE: The data set WORK.CLUSTER_SORT has 5 observations and 2 variables.
+NOTE: PROCEDURE SORT used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+
+NOTE: There were 5 observations read from the data set WORK.CLUSTER_SORT.
+NOTE: The data set WORK.CLUSTER_SORT has 5 observations and 3 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+
+NOTE: There were 5 observations read from the data set WORK.CLUSTER_SORT.
+NOTE: The data set WORK.CLUSTER_SORT has 5 observations and 3 variables.
+NOTE: PROCEDURE SORT used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+
+NOTE: There were 141 observations read from the data set WORK.CLUSTERS.
+NOTE: The data set WORK.CLUSTERS2 has 141 observations and 29 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.01 seconds
+
+
+
+NOTE: There were 141 observations read from the data set WORK.CLUSTERS2.
+NOTE: The data set WORK.CLUSTERS2 has 141 observations and 29 variables.
+NOTE: PROCEDURE SORT used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+
+NOTE: There were 141 observations read from the data set WORK.CLUSTERS2.
+NOTE: There were 5 observations read from the data set WORK.CLUSTER_SORT.
+NOTE: The data set WORK.RESULTS has 141 observations and 28 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+
+NOTE: There were 141 observations read from the data set WORK.RESULTS.
+NOTE: The data set WORK.RESULTS has 141 observations and 28 variables.
+NOTE: PROCEDURE SORT used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+
+NOTE: There were 141 observations read from the data set WORK.RESULTS.
+NOTE: The data set WORK.CNT_S1 has 141 observations and 3 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.01 seconds
+
+
+940
+941  data cnt_s20;
+942      set summary_score22;
+943      if cnt_grp='2) # of groups=4       ';
+944  run;
+
+NOTE: There were 2891 observations read from the data set WORK.SUMMARY_SCORE22.
+NOTE: The data set WORK.CNT_S20 has 515 observations and 27 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+945  %kmeans(in=cnt_s20, out=cnt_s2,grp=cnt_grp);
+
+NOTE: There were 515 observations read from the data set WORK.CNT_S20.
+NOTE: The data set WORK.SUMMARY_SCORE2 has 515 observations and 27 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+
+NOTE: The data set WORK.S1 has 1 observations and 5 variables.
+NOTE: PROCEDURE UNIVARIATE used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+
+NOTE: There were 515 observations read from the data set WORK.SUMMARY_SCORE2.
+NOTE: There were 1 observations read from the data set WORK.S1.
+NOTE: The data set WORK.S2 has 515 observations and 7 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.01 seconds
+
+
+NOTE: The data set WORK.S3 has 5 observations and 3 variables.
+NOTE: There were 515 observations read from the data set WORK.S2.
+NOTE: PROCEDURE MEANS used (Total process time):
+      real time           0.02 seconds
+      cpu time            0.03 seconds
+
+
+NOTE: There were 5 observations read from the data set WORK.S3.
+NOTE: The data set WORK.S33 has 5 observations and 4 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+NOTE: Convergence criterion is satisfied.
+NOTE: The data set WORK.CSTATUS has 1 observations and 2 variables.
+NOTE: The data set WORK.SEEDS2 has 5 observations and 2 variables.
+NOTE: There were 5 observations read from the data set WORK.S33.
+NOTE: PROCEDURE FASTCLUS used (Total process time):
+      real time           0.02 seconds
+      cpu time            0.01 seconds
+
+
+NOTE: There were 1 observations read from the data set WORK.CSTATUS.
+NOTE: PROCEDURE PRINT used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+NOTE: Convergence criterion is satisfied.
+NOTE: The data set WORK.CSTATUS2 has 1 observations and 2 variables.
+NOTE: The data set WORK.CLUSTER_MEAN has 5 observations and 2 variables.
+NOTE: There were 5 observations read from the data set WORK.SEEDS2.
+NOTE: The data set WORK.CLUSTERS has 515 observations and 29 variables.
+NOTE: PROCEDURE FASTCLUS used (Total process time):
+      real time           0.02 seconds
+      cpu time            0.03 seconds
+
+
+NOTE: There were 1 observations read from the data set WORK.CSTATUS2.
+NOTE: PROCEDURE PRINT used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+
+NOTE: There were 5 observations read from the data set WORK.CLUSTER_MEAN.
+NOTE: The data set WORK.CLUSTER_SORT has 5 observations and 2 variables.
+NOTE: PROCEDURE SORT used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+
+NOTE: There were 5 observations read from the data set WORK.CLUSTER_SORT.
+NOTE: The data set WORK.CLUSTER_SORT has 5 observations and 3 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.01 seconds
+
+
+
+NOTE: There were 5 observations read from the data set WORK.CLUSTER_SORT.
+NOTE: The data set WORK.CLUSTER_SORT has 5 observations and 3 variables.
+NOTE: PROCEDURE SORT used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+
+NOTE: There were 515 observations read from the data set WORK.CLUSTERS.
+NOTE: The data set WORK.CLUSTERS2 has 515 observations and 29 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+
+NOTE: There were 515 observations read from the data set WORK.CLUSTERS2.
+NOTE: The data set WORK.CLUSTERS2 has 515 observations and 29 variables.
+NOTE: PROCEDURE SORT used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+
+NOTE: There were 515 observations read from the data set WORK.CLUSTERS2.
+NOTE: There were 5 observations read from the data set WORK.CLUSTER_SORT.
+NOTE: The data set WORK.RESULTS has 515 observations and 28 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.01 seconds
+
+
+
+NOTE: There were 515 observations read from the data set WORK.RESULTS.
+NOTE: The data set WORK.RESULTS has 515 observations and 28 variables.
+NOTE: PROCEDURE SORT used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+
+NOTE: There were 515 observations read from the data set WORK.RESULTS.
+NOTE: The data set WORK.CNT_S2 has 515 observations and 3 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+946
+947  data cnt_s30;
+948      set summary_score22;
+949      if cnt_grp='3) # of groups=5       ';
+950  run;
+
+NOTE: There were 2891 observations read from the data set WORK.SUMMARY_SCORE22.
+NOTE: The data set WORK.CNT_S30 has 2235 observations and 27 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.01 seconds
+
+
+951  %kmeans(in=cnt_s30, out=cnt_s3,grp=cnt_grp);
+
+NOTE: There were 2235 observations read from the data set WORK.CNT_S30.
+NOTE: The data set WORK.SUMMARY_SCORE2 has 2235 observations and 27 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.01 seconds
+
+
+
+NOTE: The data set WORK.S1 has 1 observations and 5 variables.
+NOTE: PROCEDURE UNIVARIATE used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+
+NOTE: There were 2235 observations read from the data set WORK.SUMMARY_SCORE2.
+NOTE: There were 1 observations read from the data set WORK.S1.
+NOTE: The data set WORK.S2 has 2235 observations and 7 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+NOTE: The data set WORK.S3 has 5 observations and 3 variables.
+NOTE: There were 2235 observations read from the data set WORK.S2.
+NOTE: PROCEDURE MEANS used (Total process time):
+      real time           0.02 seconds
+      cpu time            0.01 seconds
+
+
+NOTE: There were 5 observations read from the data set WORK.S3.
+NOTE: The data set WORK.S33 has 5 observations and 4 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+NOTE: Convergence criterion is satisfied.
+NOTE: The data set WORK.CSTATUS has 1 observations and 2 variables.
+NOTE: The data set WORK.SEEDS2 has 5 observations and 2 variables.
+NOTE: There were 5 observations read from the data set WORK.S33.
+NOTE: PROCEDURE FASTCLUS used (Total process time):
+      real time           0.03 seconds
+      cpu time            0.04 seconds
+
+
+NOTE: There were 1 observations read from the data set WORK.CSTATUS.
+NOTE: PROCEDURE PRINT used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+NOTE: Convergence criterion is satisfied.
+NOTE: The data set WORK.CSTATUS2 has 1 observations and 2 variables.
+NOTE: The data set WORK.CLUSTER_MEAN has 5 observations and 2 variables.
+NOTE: There were 5 observations read from the data set WORK.SEEDS2.
+NOTE: The data set WORK.CLUSTERS has 2235 observations and 29 variables.
+NOTE: PROCEDURE FASTCLUS used (Total process time):
+      real time           0.02 seconds
+      cpu time            0.01 seconds
+
+
+NOTE: There were 1 observations read from the data set WORK.CSTATUS2.
+NOTE: PROCEDURE PRINT used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+
+NOTE: There were 5 observations read from the data set WORK.CLUSTER_MEAN.
+NOTE: The data set WORK.CLUSTER_SORT has 5 observations and 2 variables.
+NOTE: PROCEDURE SORT used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.01 seconds
+
+
+
+NOTE: There were 5 observations read from the data set WORK.CLUSTER_SORT.
+NOTE: The data set WORK.CLUSTER_SORT has 5 observations and 3 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+
+NOTE: There were 5 observations read from the data set WORK.CLUSTER_SORT.
+NOTE: The data set WORK.CLUSTER_SORT has 5 observations and 3 variables.
+NOTE: PROCEDURE SORT used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+
+NOTE: There were 2235 observations read from the data set WORK.CLUSTERS.
+NOTE: The data set WORK.CLUSTERS2 has 2235 observations and 29 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.01 seconds
+
+
+
+NOTE: There were 2235 observations read from the data set WORK.CLUSTERS2.
+NOTE: The data set WORK.CLUSTERS2 has 2235 observations and 29 variables.
+NOTE: PROCEDURE SORT used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+
+NOTE: There were 2235 observations read from the data set WORK.CLUSTERS2.
+NOTE: There were 5 observations read from the data set WORK.CLUSTER_SORT.
+NOTE: The data set WORK.RESULTS has 2235 observations and 28 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+
+NOTE: There were 2235 observations read from the data set WORK.RESULTS.
+NOTE: The data set WORK.RESULTS has 2235 observations and 28 variables.
+NOTE: PROCEDURE SORT used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+
+NOTE: There were 2235 observations read from the data set WORK.RESULTS.
+NOTE: The data set WORK.CNT_S3 has 2235 observations and 3 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.01 seconds
+
+
+952
+953  data cnt_s_str;
+954      set cnt_s1 cnt_s2 cnt_s3;
+955  run;
+
+NOTE: There were 141 observations read from the data set WORK.CNT_S1.
+NOTE: There were 515 observations read from the data set WORK.CNT_S2.
+NOTE: There were 2235 observations read from the data set WORK.CNT_S3.
+NOTE: The data set WORK.CNT_S_STR has 2891 observations and 3 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.01 seconds
+
+
+956
+957  proc sort data=cnt_s_str;
+958      by provider_ID;
+959  run;
+
+NOTE: There were 2891 observations read from the data set WORK.CNT_S_STR.
+NOTE: The data set WORK.CNT_S_STR has 2891 observations and 3 variables.
+NOTE: PROCEDURE SORT used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.01 seconds
+
+
+960
+961  data &RESULTS;
+962      merge Summary_score21 cnt_s_str;
+963      by provider_ID;
+964  run;
+
+NOTE: There were 4566 observations read from the data set WORK.SUMMARY_SCORE21.
+NOTE: There were 2891 observations read from the data set WORK.CNT_S_STR.
+NOTE: The data set R.STAR_2025JUL has 4566 observations and 27 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.03 seconds
+      cpu time            0.00 seconds
+
+
+965
+966
+967  /* OUTPUTS OF 'Star_2025Jul' ARE GENERATED*/
+968  /* label variables, output hospital stars */
+969  data &RESULTS;
+970      set &RESULTS;
+971
+972          label provider_id ="Provider ID";
+973          label summary_score = "Hospital Summary Score";
+974          label star = "Star Rating";
+975          label Total_measure_group_cnt = "Number of Measure Groups with >=3 Measuers";
+976          label MortSafe_group_cnt = "Number of Mortality and Safety Groups with >=3 Measuers";
+977          label cnt_grp = "Peer Grouping";
+978
+979          label Outcomes_Mortality_cnt = "Number of Measures in Outcomes-Mortality Group";
+980          label Outcomes_Safety_cnt = "Number of Measures in Outcomes-Safety Group";
+981          label Outcomes_Readmission_cnt = "Number of Measures in Outcomes-Readmission Group";
+982          label Patient_Experience_cnt = "Number of Measures in Patient Experience Group";
+983          label Process_cnt = "Number of Measures in Timely and Effective Care Group";
+984
+985          label Std_Outcomes_Mortality_score = "Standardized Outcomes-Mortality Group Score";
+986          label Std_Outcomes_Safety_score = "Standardized Outcomes-Safety Group Score";
+987          label Std_Outcomes_Readmission_score = "Standardized Outcomes-Readmission Group Score";
+988          label Std_PatientExp_score = "Standardized Patient Experience Group Score";
+989          label Std_Process_score = "Standardized Timely and Effective Care Group Score";
+990
+991          label report_indicator = "Indicator for reporting Star Rating";
+992  run;
+
+NOTE: There were 4566 observations read from the data set R.STAR_2025JUL.
+NOTE: The data set R.STAR_2025JUL has 4566 observations and 27 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.04 seconds
+      cpu time            0.03 seconds
+
+
+993
+994  **************************************
+995  ** National Average of Group Scores **
+996  **************************************;
+997  %nation_avg0(indata=&RESULTS, out=summary_avg, var=Summary_Score_Nat);
+
+NOTE: There were 2891 observations read from the data set R.STAR_2025JUL.
+      WHERE report_indicator=1;
+NOTE: The data set WORK.TEMP has 2891 observations and 2 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.00 seconds
+
+
+NOTE: Table WORK.OUT1 created, with 1 rows and 1 columns.
+
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+
+NOTE: There were 1 observations read from the data set WORK.OUT1.
+NOTE: The data set WORK.SUMMARY_AVG has 1 observations and 1 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+998  %nation_avg_peer(indata=&RESULTS, out=summary_avg_peer, var=Summary_Score_Nat,
+998! gr=Total_measure_group_cnt);
+
+NOTE: There were 2891 observations read from the data set R.STAR_2025JUL.
+      WHERE report_indicator=1;
+NOTE: The data set WORK.TEMP has 2891 observations and 3 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+NOTE: Table WORK.OUT1 created, with 3 rows and 2 columns.
+
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.01 seconds
+
+
+
+NOTE: There were 3 observations read from the data set WORK.OUT1.
+NOTE: The data set WORK.OUT2 has 1 observations and 4 variables.
+NOTE: PROCEDURE TRANSPOSE used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.01 seconds
+
+
+
+NOTE: There were 1 observations read from the data set WORK.OUT2.
+NOTE: The data set WORK.SUMMARY_AVG_PEER has 1 observations and 3 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+999
+1000  %nation_avg(indata=r.Outcome_mortality, out=outcome_mortality_avg, var=Out_Mrt_Grp_Score_Nat);
+
+NOTE: There were 2747 observations read from the data set R.OUTCOME_MORTALITY.
+      WHERE total_cnt>=3;
+NOTE: The data set WORK.TEMP has 2747 observations and 3 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+NOTE: Table WORK.OUT1 created, with 1 rows and 1 columns.
+
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+
+NOTE: There were 1 observations read from the data set WORK.OUT1.
+NOTE: The data set WORK.OUTCOME_MORTALITY_AVG has 1 observations and 1 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.01 seconds
+
+
+1001  %nation_avg(indata=r.Outcome_safety, out=outcome_safety_avg, var=Out_Sft_Grp_Score_Nat);
+
+NOTE: There were 2402 observations read from the data set R.OUTCOME_SAFETY.
+      WHERE total_cnt>=3;
+NOTE: The data set WORK.TEMP has 2402 observations and 3 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.01 seconds
+
+
+NOTE: Table WORK.OUT1 created, with 1 rows and 1 columns.
+
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+
+NOTE: There were 1 observations read from the data set WORK.OUT1.
+NOTE: The data set WORK.OUTCOME_SAFETY_AVG has 1 observations and 1 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+1002  %nation_avg(indata=r.Outcome_readmission, out=outcome_readmission_avg,
+1002! var=Out_Readm_grp_Score_Nat);
+
+NOTE: There were 3609 observations read from the data set R.OUTCOME_READMISSION.
+      WHERE total_cnt>=3;
+NOTE: The data set WORK.TEMP has 3609 observations and 3 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.01 seconds
+
+
+NOTE: Table WORK.OUT1 created, with 1 rows and 1 columns.
+
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.01 seconds
+
+
+
+NOTE: There were 1 observations read from the data set WORK.OUT1.
+NOTE: The data set WORK.OUTCOME_READMISSION_AVG has 1 observations and 1 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+1003  %nation_avg(indata=r.Ptexp, out=ptexp_avg, var=Pt_Exp_Grp_Score_Nat);
+
+NOTE: There were 3179 observations read from the data set R.PTEXP.
+      WHERE total_cnt>=3;
+NOTE: The data set WORK.TEMP has 3179 observations and 3 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+NOTE: Table WORK.OUT1 created, with 1 rows and 1 columns.
+
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+
+NOTE: There were 1 observations read from the data set WORK.OUT1.
+NOTE: The data set WORK.PTEXP_AVG has 1 observations and 1 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+1004  %nation_avg(indata=r.Process, out=process_avg, var=Prc_of_Care_Grp_Score_Nat);
+
+NOTE: There were 4324 observations read from the data set R.PROCESS.
+      WHERE total_cnt>=3;
+NOTE: The data set WORK.TEMP has 4324 observations and 3 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.01 seconds
+
+
+NOTE: Table WORK.OUT1 created, with 1 rows and 1 columns.
+
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+
+NOTE: There were 1 observations read from the data set WORK.OUT1.
+NOTE: The data set WORK.PROCESS_AVG has 1 observations and 1 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+1005
+1006
+1007  data &NATIONAL_MEAN;
+1008      merge summary_avg summary_avg_peer
+1009            outcome_mortality_avg outcome_safety_avg outcome_readmission_avg ptexp_avg process_avg
+1010            /*outcome_readmission_avg_DE*/;
+1011  run;
+
+NOTE: There were 1 observations read from the data set WORK.SUMMARY_AVG.
+NOTE: There were 1 observations read from the data set WORK.SUMMARY_AVG_PEER.
+NOTE: There were 1 observations read from the data set WORK.OUTCOME_MORTALITY_AVG.
+NOTE: There were 1 observations read from the data set WORK.OUTCOME_SAFETY_AVG.
+NOTE: There were 1 observations read from the data set WORK.OUTCOME_READMISSION_AVG.
+NOTE: There were 1 observations read from the data set WORK.PTEXP_AVG.
+NOTE: There were 1 observations read from the data set WORK.PROCESS_AVG.
+NOTE: The data set R.NATIONAL_AVERAGE_2025JUL has 1 observations and 9 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.02 seconds
+      cpu time            0.01 seconds
+
+
+1012
+1013  /* OUTPUTS OF 'national_average_2025Jul' ARE GENERATED*/
+1014  /* label variables for the national average file, output national average group and summary
+1014! scores results*/
+1015  data &NATIONAL_MEAN;
+1016      set &NATIONAL_MEAN;
+1017
+1018          label Summary_Score_Nat = "National Mean of Summary Score";
+1019          label Out_Mrt_Grp_Score_Nat = "National Mean of Outcomes-Mortality Group Score";
+1020          label Out_Sft_Grp_Score_Nat = "National Mean of Outcomes-Safety Group Score";
+1021          label Out_Readm_grp_Score_Nat = "National Mean of Outcomes-Readmission Group Score";
+1022          label Pt_Exp_Grp_Score_Nat = "National Mean of Patient Experience Group Score";
+1023          label Prc_of_Care_Grp_Score_Nat = "National Mean of Timely and Effective Care Group
+1023! Score";
+1024
+1025          label Summary_Score_Nat_Peer3 = "National Mean of Summary Score when # of Groups=3";
+1026          label Summary_Score_Nat_Peer4 = "National Mean of Summary Score when # of Groups=4";
+1027          label Summary_Score_Nat_Peer5 = "National Mean of Summary Score when # of Groups=5";
+1028  run;
+
+NOTE: There were 1 observations read from the data set R.NATIONAL_AVERAGE_2025JUL.
+NOTE: The data set R.NATIONAL_AVERAGE_2025JUL has 1 observations and 9 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.03 seconds
+      cpu time            0.01 seconds
+
+
