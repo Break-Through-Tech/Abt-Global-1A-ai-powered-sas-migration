@@ -39,7 +39,8 @@ The project presents a strong integration of practical industry challenges with 
 # AI-Powered SAS Migration
 
 **Company / Org:** Abt Global  
-**Challenge Advisor:** Sameer Desale, Sameer.Desale@abtglobal.com  
+**Challenge Advisor:** Anita Nti,anitanti77@gmail.com  
+**AI Studio Coach:** Nagalakshmi Pulivarthi,nagalakshmi.pulivarthi@breakthroughtech.org  
 **Program:** Break Through Tech AI Studio - Fall 2026
 
 ---
