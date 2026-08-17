@@ -4,7 +4,7 @@
 
 ### 👥 **Team Members**
 
-**AI Coach:** Aram Ramos
+**AI Coach:** Naga
 
 ---
 
