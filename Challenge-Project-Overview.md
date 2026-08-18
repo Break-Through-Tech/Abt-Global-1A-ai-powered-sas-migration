@@ -102,8 +102,8 @@ with print out from SAS procedures.
 - Large Language Models (LLMs)/ Generative AI
 - Agentic AI / Workflow AutomationCode Translation and Validation
   
-**Recommended Libraries:**
-- [e.g., pandas, scikit-learn, TensorFlow, Hugging Face]
+**Recommended Libraries:**  
+     pandas, scikit-learn, pyreadstat,numpy,scipy,statsmodels,pytest,datacompy,langchain/langgrapgh,pydantic,streamlit,Docker,markdown
   
  **Models and Techniques:**   
    - Pre-trained Large Language Models (LLMs) for code understanding, code generation, and documentation.     
