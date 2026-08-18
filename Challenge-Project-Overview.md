@@ -56,6 +56,14 @@ Abt Global is a leader in research, technical assistance, and evaluation in the 
 ### Project Summary
 In this project, you will use SAS datasets and legacy SAS programs and large language model (LLM)-based agentic AI techniques to translate SAS code into Python, validate outputs, and generate documentation of data processing workflows. This will help our company address the challenge of efficiently migrating legacy SAS systems to modern, scalable Python-based data pipelines while reducing manual effort and errors.
 
+This project was proposed as part of the Breakthrough Tech AI Program to explore how Agentic AI and Large Language Models (LLMs) can be used to modernize legacy analytics workflows.
+
+The objective is to build a system that automates the migration of SAS data processing pipelines to Python. The solution will translate SAS programs into Python, validate that the translated code produces equivalent results, identify discrepancies, and generate documentation describing the underlying data processing logic. The project will be evaluated using a real-world SAS pipeline consisting of four interdependent programs, including macro-based processing and analytical algorithms.
+
+Many organizations continue to rely on SAS softwares which are costly. Migrating these systems to Python often requires significant manual effort for code translation, testing, validation, and documentation. This project explores how Agentic AI can help automate portions of that workflow while maintaining accuracy and transparency.
+
+A successful solution could provide a reusable framework for migrating legacy SAS workflows, reducing modernization effort, preserving valuable business knowledge, and helping organizations transition to more accessible and scalable Python-based analytics platforms.
+
 ### Success Criteria
 Success for this project will be measured through a combination of accuracy, completeness, and usability of the end-to-end migration system. A successful project will deliver a functional, end-to-end prototype that can reliably migrate a SAS data pipeline to Python, validate the results, and clearly explain the transformation process.
 
@@ -88,6 +96,40 @@ Use these milestones to guide your work. Your team will create a **GitHub Projec
 - The public data source is available at: https://qualitynet.cms.gov/inpatient/public-reporting/overall-ratings/software
 - No known limitations or preprocessing needed at this time.
 - [Link to data dictionary or documentation, if available]
+  
+### Data Exploration :
+  
+Overall Hospital Quality Star Rating Statistical Analysis System SAS package is used to produce the 
+Centers for Medicare & Medicaid Services’ (CMS’s) Overall Hospital Quality Star Rating 
+published to Care Compare on Medicare.gov This SAS Pack comprises three main SAS programs and 
+one macro file to provide a specified quarter’s group scores, summary scores, and 
+star ratings using a simple average of measure scores into group scores, 
+a weighted average of group scores into a summary score, and k-means clustering.
+
+The SAS programs and log files can be read by any text reader. SAS datasets can only be opened in SAS environment, or 
+can be imported in python using python packages. Since it won't be possible to run the SAS programs outside of SAS 
+environment, we have provided all the input and output SAS data files in CSV format along with the SAS log file and HTML
+with print out from SAS procedures.
+
+- SAS Programs for migrating to python
+   - 0 – Data and Measure Standardization_2025Jul.sas
+   - 1 – First Stage_Simple Average of Measure Scores_2025Jul.sas
+   - 2 – Second Stage Weighted Average and Categorize Star_2025Jul.sas
+   - Star_Macros.sas
+- Input data sets
+   - alldata_2025jul.csv
+   - alldata_2025jul.sas7bdat
+- SAS Program Log File
+  - SAS_Log.log
+
+- Output Datasets
+  - SAS Output data files
+     - less100_measure.sas7bdat, measure_average_stddev_2025jul.sas7bdat, national_average_2025jul.sas7bdat,
+      outcome_mortality.sas7bdat, outcome_readmission.sas7bdat, outcome_safety.sas7bdat, process.sas7bdat
+      ptexp.sas7bdat, star_2025jul.sas7bdat, std_data_2025jul_analysis.sas7bdat
+  - CSV Output data files
+      - less100_measure.csv, measure_average_stddev_2025jul.csv, national_average_2025jul.csv, outcome_mortality.csv
+        outcome_readmission.csv, outcome_safety.csv, process.csv, ptexp.csv, star_2025jul.csv, std_data_2025jul_analysis.csv
 
 ---
 
@@ -100,9 +142,31 @@ Use these milestones to guide your work. Your team will create a **GitHub Projec
   
 **Recommended Libraries:**
 - [e.g., pandas, scikit-learn, TensorFlow, Hugging Face]
+  
+ **Models and Techniques:**   
+   - Pre-trained Large Language Models (LLMs) for code understanding, code generation, and documentation.     
+   - Agent-based workflow orchestration to coordinate translation, validation, debugging, and documentation tasks.     
+   - Rule-based and programmatic validation techniques to compare SAS and Python outputs.  
+
+**Input Features:**  
+   - SAS source code, including DATA steps, PROC SQL statements, and macro logic.  
+   - Input datasets and intermediate outputs generated throughout the SAS pipeline.  
+   - Validation metrics such as row counts, column statistics, and aggregate measures.  
 
 **Evaluation Metrics:**
 - Accuracy, Completeness, Usability
+- Compare translated Python outputs against SAS-generated outputs (ground truth).
+- Measure correctness using:
+
+   - Row count agreement      
+    
+   - Column-level value comparisons        
+    
+   - Aggregate statistic comparisons   
+        
+   - Successful execution of the end-to-end pipeline
+
+- Evaluate the quality of generated documentation by verifying that it accurately describes the underlying data processing workflow.
 
 ---
 
