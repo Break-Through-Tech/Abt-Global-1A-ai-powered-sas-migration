@@ -134,22 +134,21 @@ with print out from SAS procedures.
 
 ## 📚 Resources to Get Started
 
-The following resources will help your team understand the problem space and potential technical approaches for this project:
+The primary resources for this project are the provided SAS programs, datasets, logs, and reference outputs. These should be reviewed first so that the team understands the existing SAS workflow before designing the migration system.
 
 **Background Reading:**
-- [e.g., Link to an article or blog post about the problem domain]
-- [e.g., Link to an industry report or case study]
+Teams may find it useful to review documentation and tutorials covering:
+  - SAS DATA step concepts
+	- SAS PROC SQL
+	- SAS macros and macro variables
+	- Reading SAS datasets with Python
+	- pandas data manipulation
+	- scikit-learn clustering, particularly k-means
+	- LLM-based code generation and translation
+	- Agentic AI workflow design
+	- Automated software testing and data validation
+  - LLM-generated technical documentation
 
-**Technical Tutorials:**
-- [e.g., Link to a free tutorial on the ML technique(s) involved]
-- [e.g., Link to documentation for a key library or tool]
-
-**Code Examples:**
-- [e.g., Link to a relevant GitHub repo]
-- [e.g., Link to a sample implementation or starter code]
-
-**Other:**
-- [Links to any additional resources — e.g., papers, videos, podcasts, etc.]
 
 *Feel free to explore beyond these, and share anything interesting you find with me!*
 
@@ -159,17 +158,19 @@ The following resources will help your team understand the problem space and pot
 
 **Official check-ins:** During our biweekly 45-minute AI Studio Lab Section meeting block (2nd and 4th week of every month)
 
+During these meetings, we can:
+	• Review the team’s progress against project milestones.
+	• Discuss technical questions or blockers.
+	• Review design and architecture decisions.
+	• Discuss validation results and discrepancies.
+	• Prioritize next steps.
+
  **Other ways to reach out to me with questions:** 
-* [e.g., Your team's channel within Break Through Tech’s Discord space]
-* [e.g., Email; please copy your teammates and AI Studio Coach]
-* [e.g., Request a team check-in on Zoom]
-* [Note: I will aim to respond within 48 hours. Please reach out to your AI Studio Coach with urgent questions.]
+Outside of the official check-ins, please use the team’s designated Break Through Tech communication channel for project-related questions.
+When asking technical questions, please include enough context for me to understand the issue—for example, the relevant SAS/Python code, error message, validation result, or GitHub issue.
+For questions that affect the whole team, please use a shared communication channel rather than individual messages whenever possible so that everyone has access to the same information.
+I will aim to respond to project-related questions within 48 hours when possible. For urgent program-related questions or issues requiring immediate attention, please reach out to your AI Studio Coach.
 
-> 💡 **Challenge Advisor: Please update the above based on your availability and preference. If you are not able to answer questions or meet with fellows outside of the biweekly Lab Section check-ins, simply write in "N/A (only available during the official check-in times)"**
-
-**Recommended free coding / collaboration tools**
-* […]
-* […]
 
 ---
 
