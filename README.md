@@ -1,121 +1,130 @@
-# AI Studio Challenge Project Title
+# SASGuard
 
-> 💡 **Note for the team:** This is just a template. Update the above title with your AI Studio Challenge Project name. Remove all guidance notes and example text in this template and populate this README with your own content. You can work on this README throughout AI Studio, and get feedback from your AI Studio Coach and Challenge Advisor before finalizing it.  
+SASGuard is a verification-guided, AI-assisted system for migrating legacy SAS analytics
+pipelines to Python. The project is being developed for the Break Through Tech AI Studio Fall
+2026 program in partnership with Abt Global.
 
----
+Our primary case study is the CMS July 2025 Overall Hospital Quality Star Rating pipeline. The
+supplied project includes SAS programs, input datasets, logs, and trusted SAS output artifacts.
 
-### 👥 **Team Members**
+## Why SASGuard
 
-**Example:**
+Producing Python code that runs is not enough to establish a correct migration. SASGuard treats
+the existing SAS outputs as trusted reference behavior. Generated Python must be executed and
+compared against those artifacts using deterministic validation software.
 
-| Name             | GitHub Handle | Contribution                                                             |
-|------------------|---------------|--------------------------------------------------------------------------|
-| Taylor Nguyen    | @taylornguyen | Data exploration, visualization, overall project coordination            |
-| Jordan Ramirez   | @jramirez     | Data collection, exploratory data analysis (EDA), dataset documentation  |
-| Amina Hassan     | @aminahassan  | Data preprocessing, feature engineering, data validation                 |
-| Priya Mehta      | @pmehta       | Model selection, hyperparameter tuning, model training and optimization  |
-| Chris Park       | @chrispark    | Model evaluation, performance analysis, results interpretation           |
+The planned workflow is:
 
----
+```text
+SAS source
+    -> translation
+    -> generated Python
+    -> isolated execution
+    -> deterministic validation
+    -> first-divergence diagnosis
+    -> constrained repair
+    -> verification report
+```
 
-## 🎯 **Project Highlights**
+AI components perform translation and diagnostic reasoning. Ordinary software controls
+execution, artifact comparison, and pass or fail decisions.
 
-**Example:**
+## Current status
 
-- Developed a machine learning model using `[model type/technique]` to address `[challenge project task]`.
-- Achieved `[key metric or result]`, demonstrating `[value or impact]` for `[host company]`.
-- Generated actionable insights to inform business decisions at `[host company or stakeholders]`.
-- Implemented `[specific methodology]` to address industry constraints or expectations.
+The project is in the Data Exploration and Setup milestone. Current work focuses on:
 
----
+- a reproducible Docker and VS Code development environment;
+- a maintainable Python package and automated quality checks;
+- inventorying the supplied SAS and data artifacts;
+- documenting the three SAS processing stages;
+- implementing trusted data loading and initial comparison utilities.
 
-## 👩🏽‍💻 **Setup and Installation**
+No end-to-end parity result is claimed at this stage.
 
-**Provide step-by-step instructions so someone else can run your code and reproduce your results. Depending on your setup, include:**
+## Team
 
-* How to clone the repository
-* How to install dependencies
-* How to set up the environment
-* How to access the dataset(s)
-* How to run the notebook or scripts
+| Name | GitHub | Initial milestone focus |
+|---|---|---|
+| Tony Mapeke | [@TonyMapeke](https://github.com/TonyMapeke) | Artifact inventory and regression facts |
+| Vasco Hinostroza | [@theocsav](https://github.com/theocsav) | Development environment, project structure, and CI |
+| Amiri Hayes | [@AmiriHayes](https://github.com/AmiriHayes) | Program 0 analysis and translation prototype |
+| Keira Wong | [@keiraw777](https://github.com/keiraw777) | Program 1 analysis and translation prototype |
+| Hailey Muñiz | [@haileybella](https://github.com/haileybella) | Program 2 analysis and contributor documentation |
+| Loana-Ardi Igabaneza | [@Loaardi](https://github.com/Loaardi) | Data loaders and artifact comparison |
 
----
+## Repository structure
 
-## 🏗️ **Project Overview**
+```text
+.
+|-- data/                  Supplied input, SAS source, and trusted outputs
+|-- docs/                  Development and team workflow documentation
+|-- notebooks/             Exploratory notebooks
+|-- src/sasguard/          Installable Python package
+|-- tests/                 Automated tests
+|-- .devcontainer/         VS Code Dev Container configuration
+|-- .github/workflows/     Continuous integration
+|-- Dockerfile             Canonical development image
+|-- compose.yaml           Local container workflow
+`-- pyproject.toml         Dependencies and development-tool configuration
+```
 
-**Describe:**
+## Run with Docker
 
-- How this project is connected to the Break Through Tech AI Program
-- Your AI Studio host company and the project objective and scope
-- The real-world significance of the problem and the potential impact of your work
+### Prerequisites
 
----
+- Git
+- Docker Desktop, or Docker Engine with Docker Compose
 
-## 📊 **Data Exploration**
+### Windows PowerShell
 
-**You might consider describing the following (as applicable):**
+```powershell
+git clone https://github.com/Break-Through-Tech/Abt-Global-1A-ai-powered-sas-migration.git
+Set-Location .\Abt-Global-1A-ai-powered-sas-migration
+docker compose build
+docker compose run --rm sasguard pytest
+docker compose run --rm sasguard sasguard version
+```
 
-* The dataset(s) used: origin, format, size, type of data
-* Data exploration and preprocessing approaches
-* Insights from your Exploratory Data Analysis (EDA)
-* Challenges and assumptions when working with the dataset(s)
+### macOS zsh
 
-**Potential visualizations to include:**
+```zsh
+git clone https://github.com/Break-Through-Tech/Abt-Global-1A-ai-powered-sas-migration.git
+cd Abt-Global-1A-ai-powered-sas-migration
+docker compose build
+docker compose run --rm sasguard pytest
+docker compose run --rm sasguard sasguard version
+```
 
-* Plots, charts, heatmaps, feature visualizations, sample dataset images
+The expected CLI version is currently `0.1.0`.
 
----
+### Start JupyterLab
 
-## 🧠 **Model Development**
+The following one-line command works in PowerShell and zsh:
 
-**You might consider describing the following (as applicable):**
+```bash
+docker compose run --rm --service-ports sasguard jupyter lab --ip=0.0.0.0 --no-browser
+```
 
-* Model(s) used (e.g., CNN with transfer learning, regression models)
-* Feature selection and Hyperparameter tuning strategies
-* Training setup (e.g., % of data for training/validation, evaluation metric, baseline performance)
+Open the tokenized URL shown in the terminal. The repository is mounted at `/workspace`, and the
+supplied `data/` directory is mounted read-only inside the container.
 
+See [Development setup](docs/development-setup.md) for VS Code Dev Containers, optional local
+Python environments, and troubleshooting.
 
----
+## Team workflow
 
-## 📈 **Results & Key Findings**
+- Read [Contributing](CONTRIBUTING.md) before creating a branch or pull request.
+- Read [Issues and project board](docs/issues-and-project-board.md) before starting an issue.
+- Track work on the [Abt-Global-1A Project Board](https://github.com/orgs/Break-Through-Tech/projects/58).
+- View the repository's [GitHub issues](https://github.com/Break-Through-Tech/Abt-Global-1A-ai-powered-sas-migration/issues).
 
-**You might consider describing the following (as applicable):**
+## Data integrity
 
-* Performance metrics (e.g., Accuracy, F1 score, RMSE)
-* How your model performed
-* Insights from evaluating model fairness
+Supplied SAS programs, input data, and trusted output artifacts are source-of-truth materials.
+Contributors must not modify them to make generated results pass. Comparisons must align records
+by `PROVIDER_ID`, preserve missing values, and explain numerical tolerances.
 
-**Potential visualizations to include:**
+## License
 
-* Confusion matrix, precision-recall curve, feature importance plot, prediction distribution, outputs from fairness or explainability tools
-
----
-
-## 🚀 **Next Steps**
-
-**You might consider addressing the following (as applicable):**
-
-* What are some of the limitations of your model?
-* What would you do differently with more time/resources?
-* What additional datasets or techniques would you explore?
-
----
-
-## 📝 **License**
-
-Specify how your project can be used by others. Choose an appropriate license and link it here (e.g., MIT, Apache 2.0). Make sure your Challenge Advisor approves of the selected license type. 
-
-**Example:**
-This project is licensed under the MIT License.
-
----
-
-## 📄 **References** (Optional but encouraged)
-
-Cite relevant papers, articles, or resources that supported your project.
-
----
-
-## 🙏 **Acknowledgements** (Optional but encouraged)
-
-Thank your Challenge Advisor, host company representatives, TA, and others who supported your project.
+The project license has not yet been selected. The team will confirm an appropriate license with
+the Challenge Advisor before publishing one.
