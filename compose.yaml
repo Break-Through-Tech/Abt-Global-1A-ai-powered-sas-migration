@@ -1,0 +1,14 @@
+services:
+  sasguard:
+    build:
+      context: .
+    working_dir: /workspace
+    init: true
+    command: sleep infinity
+    environment:
+      PYTHONPATH: /workspace/src
+    ports:
+      - "8888:8888"
+    volumes:
+      - .:/workspace
+      - ./data:/workspace/data:ro

@@ -1,20 +1,19 @@
-# AI Studio Challenge Project Title
+# SASGuard
 
-> 💡 **Note for the team:** This is just a template. Update the above title with your AI Studio Challenge Project name. Remove all guidance notes and example text in this template and populate this README with your own content. You can work on this README throughout AI Studio, and get feedback from your AI Studio Coach and Challenge Advisor before finalizing it.  
-
----
+Verification-guided migration of a real CMS hospital quality analytics pipeline from SAS to
+Python. The project combines AI-assisted translation with deterministic behavioral comparison
+against trusted SAS artifacts.
 
 ### 👥 **Team Members**
 
-**Example:**
-
-| Name             | GitHub Handle | Contribution                                                             |
-|------------------|---------------|--------------------------------------------------------------------------|
-| Taylor Nguyen    | @taylornguyen | Data exploration, visualization, overall project coordination            |
-| Jordan Ramirez   | @jramirez     | Data collection, exploratory data analysis (EDA), dataset documentation  |
-| Amina Hassan     | @aminahassan  | Data preprocessing, feature engineering, data validation                 |
-| Priya Mehta      | @pmehta       | Model selection, hyperparameter tuning, model training and optimization  |
-| Chris Park       | @chrispark    | Model evaluation, performance analysis, results interpretation           |
+| Name | GitHub Handle | Initial milestone focus |
+|---|---|---|
+| Tony Mapeke | [@TonyMapeke](https://github.com/TonyMapeke) | Artifact inventory and regression facts |
+| Vasco Hinostroza | [@theocsav](https://github.com/theocsav) | Development environment, project structure, and CI |
+| Amiri Hayes | [@AmiriHayes](https://github.com/AmiriHayes) | Program 0 analysis and translation prototype |
+| Keira Wong | [@keiraw777](https://github.com/keiraw777) | Program 1 analysis and translation prototype |
+| Hailey Muñiz | [@haileybella](https://github.com/haileybella) | Program 2 analysis and contributor documentation |
+| Loana-Ardi Igabaneza | [@Loaardi](https://github.com/Loaardi) | Data loaders and artifact comparison |
 
 ---
 
@@ -31,13 +30,16 @@
 
 ## 👩🏽‍💻 **Setup and Installation**
 
-**Provide step-by-step instructions so someone else can run your code and reproduce your results. Depending on your setup, include:**
+Docker and VS Code Dev Containers provide the canonical development environment:
 
-* How to clone the repository
-* How to install dependencies
-* How to set up the environment
-* How to access the dataset(s)
-* How to run the notebook or scripts
+```bash
+docker compose build
+docker compose run --rm sasguard pytest
+docker compose run --rm sasguard sasguard version
+```
+
+See [Development setup](docs/development-setup.md) for Docker, VS Code, JupyterLab, and optional
+local Python instructions.
 
 ---
 
