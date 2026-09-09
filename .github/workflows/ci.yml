@@ -34,5 +34,8 @@ jobs:
       - name: Type-check
         run: mypy
 
+      - name: Verify protected artifacts
+        run: sasguard verify-integrity
+
       - name: Test
         run: pytest

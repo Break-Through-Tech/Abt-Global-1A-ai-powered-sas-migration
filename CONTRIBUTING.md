@@ -79,6 +79,7 @@ The description should include:
 - `docker compose run --rm sasguard ruff check .`
 - `docker compose run --rm sasguard ruff format --check .`
 - `docker compose run --rm sasguard mypy`
+- `docker compose run --rm sasguard sasguard verify-integrity`
 - `docker compose run --rm sasguard pytest`
 
 ## Data integrity
@@ -161,6 +162,7 @@ Run all checks before requesting review:
 docker compose run --rm sasguard ruff check .
 docker compose run --rm sasguard ruff format --check .
 docker compose run --rm sasguard mypy
+docker compose run --rm sasguard sasguard verify-integrity
 docker compose run --rm sasguard pytest
 ```
 
@@ -190,6 +192,11 @@ The following materials are authoritative and must not be edited during translat
 
 Generated code must not read trusted output files. Validation code may read generated and trusted
 outputs, but it must not modify either source.
+
+The protected-file paths and SHA-256 digests are recorded in
+`configs/protected-artifacts.json`. See [Protected artifact integrity](docs/data-integrity.md) for
+the checker, trust boundary, and controlled update process. Do not regenerate the manifest during
+ordinary translation, validation, or repair work.
 
 ## Definition of done
 
