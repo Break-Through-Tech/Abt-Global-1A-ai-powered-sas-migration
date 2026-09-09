@@ -1,0 +1,18 @@
+* text=auto eol=lf
+
+*.csv text eol=lf
+*.md text eol=lf
+*.py text eol=lf
+*.sas text eol=lf
+*.toml text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+
+*.gif binary
+*.ico binary
+*.jpeg binary
+*.jpg binary
+*.pdf binary
+*.png binary
+*.sas7bdat binary
+*.xlsx binary
