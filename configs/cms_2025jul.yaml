@@ -1,0 +1,57 @@
+schema_version: 1
+
+project:
+  name: cms_star_2025jul
+  key: PROVIDER_ID
+
+source:
+  directory: data/Project_1/SAS Programs
+  programs:
+    - 0 - Data and Measure Standardization_2025Jul.sas
+    - 1 - First stage_Simple Average of Measure Scores_2025Jul.sas
+    - 2 - Second Stage_Weighted Average and Categorize Star_2025Jul.sas
+  macros:
+    - Star_Macros.sas
+
+input:
+  csv: data/Project_1/Starrating/alldata_2025jul.csv
+  sas7bdat: data/Project_1/Starrating/alldata_2025jul.sas7bdat
+
+reference:
+  csv_directory: data/Project_1/SAS Output CSV
+  sas7bdat_directory: data/Project_1/SAS Output
+  preferred_numeric_source: sas7bdat
+  artifacts:
+    - name: LESS100_MEASURE
+      csv_filename: LESS100_MEASURE.csv
+      sas7bdat_filename: less100_measure.sas7bdat
+    - name: MEASURE_AVERAGE_STDDEV_2025JUL
+      csv_filename: MEASURE_AVERAGE_STDDEV_2025JUL.csv
+      sas7bdat_filename: measure_average_stddev_2025jul.sas7bdat
+    - name: NATIONAL_AVERAGE_2025JUL
+      csv_filename: NATIONAL_AVERAGE_2025JUL.csv
+      sas7bdat_filename: national_average_2025jul.sas7bdat
+    - name: OUTCOME_MORTALITY
+      csv_filename: OUTCOME_MORTALITY.csv
+      sas7bdat_filename: outcome_mortality.sas7bdat
+    - name: OUTCOME_READMISSION
+      csv_filename: OUTCOME_READMISSION.csv
+      sas7bdat_filename: outcome_readmission.sas7bdat
+    - name: OUTCOME_SAFETY
+      csv_filename: OUTCOME_SAFETY.csv
+      sas7bdat_filename: outcome_safety.sas7bdat
+    - name: PROCESS
+      csv_filename: PROCESS.csv
+      sas7bdat_filename: process.sas7bdat
+    - name: PTEXP
+      csv_filename: PTEXP.csv
+      sas7bdat_filename: ptexp.sas7bdat
+    - name: STAR_2025JUL
+      csv_filename: STAR_2025JUL.csv
+      sas7bdat_filename: star_2025jul.sas7bdat
+    - name: STD_DATA_2025JUL_ANALYSIS
+      csv_filename: STD_DATA_2025JUL_ANALYSIS.csv
+      sas7bdat_filename: std_data_2025jul_analysis.sas7bdat
+
+repair:
+  max_attempts: 3
