@@ -60,7 +60,9 @@ No end-to-end parity result is claimed at this stage.
 |-- data/                  Supplied input, SAS source, and trusted outputs
 |-- configs/               Protected-artifact and pipeline configuration
 |-- docs/                  Development and team workflow documentation
+|-- generated/             Generated Python entry points
 |-- notebooks/             Exploratory notebooks
+|-- scripts/               Cross-platform runner entry scripts
 |-- src/sasguard/          Installable Python package
 |-- tests/                 Automated tests
 |-- .devcontainer/         VS Code Dev Container configuration
@@ -134,6 +136,10 @@ check validates all supplied artifacts against a version-controlled SHA-256 mani
 
 SASGuard also provides versioned models for machine-readable artifact comparisons and run
 provenance. See [Reproducible run manifests](docs/run-manifests.md) for the schema and usage.
+
+Generated Python runs in a separate network-disabled Docker service that cannot access trusted SAS
+outputs. See [Isolated generated-code runner](docs/isolated-runner.md) for its access boundary,
+PowerShell and zsh commands, machine-readable results, and limitations.
 
 ## License
 

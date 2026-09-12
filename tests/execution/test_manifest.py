@@ -9,6 +9,7 @@ import pytest
 from pydantic import ValidationError
 
 from sasguard.execution.manifest import RunManifest, TokenUsage
+from sasguard.execution.result import ExecutionResult, ExecutionStatus
 from sasguard.provenance.hashing import hash_files, sha256_file
 from sasguard.verification.artifact import ArtifactComparison, ReferenceSource
 
@@ -99,6 +100,26 @@ def test_create_supplies_uuid_and_timezone_aware_timestamp() -> None:
 
     assert isinstance(manifest.run_id, UUID)
     assert manifest.timestamp.utcoffset() == UTC.utcoffset(None)
+
+
+def test_manifest_can_attach_an_isolated_execution_result() -> None:
+    manifest = RunManifest.create(
+        source_hashes={"source.sas": "a" * 64},
+        input_hashes={"input.csv": "b" * 64},
+    )
+    execution = ExecutionResult(
+        execution_id=UUID("12345678-1234-5678-1234-567812345678"),
+        status=ExecutionStatus.SUCCEEDED,
+        exit_code=0,
+        runtime_seconds=1.5,
+        output_files=["result.csv"],
+    )
+
+    updated = manifest.with_execution_result(execution)
+
+    assert updated.execution_result == execution
+    assert updated.runtime_seconds == 1.5
+    assert json.loads(updated.to_json())["execution_result"]["status"] == "succeeded"
 
 
 def test_manifest_rejects_partial_translation_metadata() -> None:
