@@ -103,6 +103,18 @@ After opening the pull request:
 The author must not approve their own pull request. A pull request is ready to merge only when one
 teammate has approved it, all required checks pass, and all review conversations are resolved.
 
+## Closing an issue
+
+An issue is ready to close when:
+
+1. All acceptance criteria are satisfied.
+2. The implementation or documentation has been reviewed.
+3. Required CI checks pass.
+4. Any related review conversations are resolved.
+5. The project-board item is moved to `Done`.
+
+Issues should not be closed solely because work has started or a pull request has been opened.
+
 ## Python names and casing
 
 Follow these conventions:
@@ -153,6 +165,23 @@ standard_deviation = values.std(ddof=1)
 Add docstrings to public modules, classes, and functions. A useful docstring explains inputs,
 outputs, important missing-value behavior, and raised exceptions. Remove commented-out code rather
 than keeping it in the repository. Git history already preserves previous implementations.
+
+## Generated and manually written Code
+
+Keep generated code separated from manually written application code: 
+
+- Generated Python entry points belong in `generated/`.
+- Manually written application code belongs in `src/sasguard/`.
+- Manually written tests belong in `tests/`.
+
+Generated code must not read or modify supplied SAS source, input datasets, or trusted output artifacts. Validation software may compare generated results with trusted outputs, but must not modify either source.
+
+When adding or changing generated code:
+
+1. Document how the code was generated.
+2. Keep generated code separate from manually written application code.
+3. Verify the generated results using the project's validation commands.
+4. Do not modify trusted artifacts to make generated results pass validation.
 
 ## Validation and testing
 
