@@ -12,7 +12,7 @@ Program 1 (`1 - First stage_Simple Average of Measure Scores_2025Jul.sas`) calcu
 | 4 | Patient Experience |
 | 5 | Timely and Effective Care |
 
-For each domain, Program 1 counts how many measures belong to it, then calls a shared macro, `%grp_score` (defined in `Star_Macros.sas`), to compute and save that domain's score for every hospital. All five domain scores are later combined in Program 2 into one final summary score and star rating.
+For each domain, Program 1 counts how many measures are in the active domain measure list, then calls a shared macro, `%grp_score` (defined in `Star_Macros.sas`), to compute and save that domain's score for every hospital. All five domain scores are later combined in Program 2 into one final summary score and star rating.
 
 | | |
 |---|---|
@@ -24,6 +24,8 @@ For each domain, Program 1 counts how many measures belong to it, then calls a s
 ---
 
 ## Domain-to-Measure Mapping
+
+Program 0 excludes measures reported by 100 or fewer hospitals. For July 2025, no measures were excluded, so the domain measure counts below are the final counts used by Program 1.
 
 Each included measure is assigned to one of the five domains.
 
@@ -108,13 +110,12 @@ The per-hospital counting and weighting both happen inside the `%grp_score` macr
 
 | Term | What it means |
 |---|---|
-| Domain measure count | Fixed number of measures assigned to a domain (such as 7 for Mortality). Same for every hospital. |
+| Domain measure count | Number of measures in the active domain list for the release (such as 7 for Mortality in July 2025). This count is the same for every hospital within that release. |
 | `total_cnt` | How many of those measures **this specific hospital** actually reported (non-missing). Varies hospital to hospital. |
 | `measure_wt` | Equal weight per available measure: `1 / total_cnt`. |
 | `score_before_std` | Simple average of the hospital's available measures. |
 
-**How the average is calculated:** the macro sums only the hospital's non-missing measure values, then multiplies by the equal weight (`1/total_cnt`). Because missing
-measures are automatically skipped rather than treated as zero, the result is a true average over whatever the hospital actually reported, not an average dragged down by counting absent measures as zero.
+**How the average is calculated:** the macro sums only the hospital's non-missing measure values, then multiplies by the equal weight (`1/total_cnt`). Because missing measures are automatically skipped rather than treated as zero, the result is a true average over whatever the hospital actually reported, not an average dragged down by counting absent measures as zero.
 
 ### Example
 
@@ -137,27 +138,31 @@ If a hospital has zero available measures in a domain (such as `total_cnt = 0`),
 | `score_before_std` | Missing |
 | `grp_score` | Missing |
 
-None of these become `0`. 
+None of these become `0`.
 
-**Why this matters for the Python translation:** A hospital with no reported measures in a domain must end up with `NaN`, not `0`, in all three fields. Treating a missing domain score as `0` would incorrectly convert a missing value into an observed numeric score. This could negatively impact future weighting and summary-score calculations.
+Hospitals with missing `score_before_std` values are also excluded from the non-missing values used by `PROC STANDARD` and `PROC MEANS` when the domain-level mean and standard deviation are calculated.
+
+**Why this matters for the Python translation:** A hospital with no reported measures in a domain must end up with `NaN`, not `0`, in all three fields. Treating a missing domain score as `0` would incorrectly convert a missing value into an observed numeric score. This could affect later weighting and summary-score calculations.
 
 ---
 
 ## Group-Score Macro Trace
 
-The same macro, `%grp_score`, runs once per domain. Only the measure list and output file name change between the five calls but the underlying steps are identical every time.
+The same macro, `%grp_score`, runs once per domain. Only the measure list and output file name change between the five calls, but the underlying steps are identical every time.
 
 | Step | What happens |
 |---|---|
-| 1 | Check each measure in the domain and flag whether the hospital reported it (present or missing). |
-| 2 | Count the flagged measures, and this becomes `total_cnt`. |
+| 1 | For each measure in the domain, assign an availability flag of `1` when the hospital's value is non-missing and `0` when it is missing. |
+| 2 | Sum the availability flags to calculate `total_cnt`, the number of non-missing measures available for that hospital. |
 | 3 | If `total_cnt` is greater than zero, calculate the equal weight (`1/total_cnt`) and the simple average of available measures (`score_before_std`). |
-| 4 | Standardize `score_before_std` across all hospitals to produce `grp_score`. This is the second standardization step. Missing values stay missing through this step. |
-| 5 | Separately, calculate the overall mean and standard deviation of `score_before_std` across all hospitals. |
+| 4 | Use `PROC STANDARD` to standardize `score_before_std` across hospitals with non-missing `score_before_std` values and produce `grp_score`. This is the second standardization step. Hospitals with missing `score_before_std` remain missing. |
+| 5 | Separately, use `PROC MEANS` to calculate the mean and sample standard deviation of `score_before_std` across hospitals with non-missing values. |
 | 6 | Attach that overall mean and standard deviation to every hospital's row, so each hospital's record shows both its own values and the reference values used to standardize it. |
 | 7 | Combine everything into one final file for the domain, matched up by hospital ID. |
 
-Note: Because steps 1–7 are identical across all five domains, this single trace applies to every domain, the only thing that changes per call is *which measures* are fed in.
+The standard deviation used by the SAS procedures is the sample standard deviation, the same as `pandas.Series.std(ddof=1)` in a Python implementation. Preserving this behavior is important for numerical parity between the SAS and Python results.
+
+Note: Because steps 1–7 are identical across all five domains, this single trace applies to every domain and the only thing that changes per call is which measures are fed in.
 
 | # | Domain | Measures fed in |
 |---|---|---|
@@ -171,14 +176,15 @@ Note: Because steps 1–7 are identical across all five domains, this single tra
 
 ## Standardization Stages
 
-There are two separate standardization steps across the whole pipeline. One is in Program 0, another one in Program 1.
+There are two separate standardization steps across the whole pipeline. One is in Program 0, and the other is in Program 1.
 
 | | First standardization | Second standardization |
 |---|---|---|
 | **Where** | Program 0 | Program 1 (inside `%grp_score`) |
 | **What's standardized** | Each individual measure score | The domain-level average (`score_before_std`) |
-| **When it runs** | Once per measure, before Program 1 runs | Once per domain, across hospitals, inside the macro |
-| **Result** | Standardized measure scores, mean 0 / std 1 | `grp_score`, mean 0 / std 1 across hospitals |
+| **When it runs** | Once per measure, before Program 1 runs | Once per domain, across hospitals with non-missing `score_before_std`, inside the macro |
+| **Result** | Standardized measure scores, mean 0 / std 1 | `grp_score`, mean 0 / std 1 across hospitals with non-missing domain averages |
+| **Standard deviation** | Sample standard deviation | Sample standard deviation, equivalent to `std(ddof=1)` in pandas |
 | **Extra step** | Some measures also have their sign flipped so a higher value always means better performance | N/A |
 
 ---
@@ -203,6 +209,6 @@ Important output columns include:
 | `total_cnt` | Number of available measures the hospital reported in this domain |
 | `measure_wt` | Weight applied to each available measure (`1 / total_cnt`) |
 | `score_before_std` | Simple average of the hospital's available measures |
-| `Mean` | Overall average of everyone's `score_before_std` in this domain |
-| `StdDev` | Overall standard deviation of everyone's `score_before_std` in this domain |
+| `Mean` | Mean of non-missing `score_before_std` values across hospitals in this domain |
+| `StdDev` | Sample standard deviation of non-missing `score_before_std` values across hospitals in this domain |
 | `grp_score` | Final standardized domain score |
