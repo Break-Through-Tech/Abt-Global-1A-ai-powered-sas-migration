@@ -1,6 +1,8 @@
 """Deterministic artifact verification models and utilities."""
 
+from sasguard.columns import resolve_column_name
 from sasguard.verification.artifact import ArtifactComparison, ReferenceSource
+from sasguard.verification.comparator import ComparisonInputError, compare_artifacts
 from sasguard.verification.policy import (
     ArtifactComparisonPolicy,
     ColumnComparisonPolicy,
@@ -9,7 +11,6 @@ from sasguard.verification.policy import (
     NumericTolerance,
     StructuralMismatchAction,
     StructuralPolicy,
-    resolve_column_name,
 )
 
 __all__ = [
@@ -17,10 +18,12 @@ __all__ = [
     "ArtifactComparisonPolicy",
     "ColumnComparisonPolicy",
     "ComparisonKind",
+    "ComparisonInputError",
     "MissingValueMode",
     "NumericTolerance",
     "ReferenceSource",
     "StructuralMismatchAction",
     "StructuralPolicy",
+    "compare_artifacts",
     "resolve_column_name",
 ]
