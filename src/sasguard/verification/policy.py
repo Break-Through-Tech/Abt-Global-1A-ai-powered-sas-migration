@@ -38,10 +38,9 @@ class ComparisonKind(StrEnum):
 
 
 class StructuralMismatchAction(StrEnum):
-    """Whether a reported structural mismatch makes comparison fail."""
+    """Required outcome for a reported structural mismatch."""
 
     FAIL = "fail"
-    REPORT = "report"
 
 
 class MissingValueMode(StrEnum):
@@ -77,7 +76,7 @@ class ColumnComparisonPolicy(StrictPolicyModel):
 
 
 class StructuralPolicy(StrictPolicyModel):
-    """Pass or fail behavior for structural differences."""
+    """Explicit failure behavior for structural differences."""
 
     missing_columns: StructuralMismatchAction = StructuralMismatchAction.FAIL
     extra_columns: StructuralMismatchAction = StructuralMismatchAction.FAIL

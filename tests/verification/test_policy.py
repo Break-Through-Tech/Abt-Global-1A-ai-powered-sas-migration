@@ -107,14 +107,14 @@ def test_policy_rejects_undocumented_fields() -> None:
         )
 
 
-def test_structural_mismatches_can_be_reported_without_being_failures() -> None:
-    policy = ArtifactComparisonPolicy(
-        keys=("PROVIDER_ID",),
-        structural=StructuralPolicy(extra_columns=StructuralMismatchAction.REPORT),
-    )
+def test_structural_mismatches_are_always_failures() -> None:
+    policy = ArtifactComparisonPolicy(keys=("PROVIDER_ID",))
 
-    assert policy.structural.extra_columns is StructuralMismatchAction.REPORT
+    assert policy.structural.extra_columns is StructuralMismatchAction.FAIL
     assert policy.structural.missing_columns is StructuralMismatchAction.FAIL
+
+    with pytest.raises(ValidationError):
+        StructuralPolicy.model_validate({"extra_columns": "report"})
 
 
 def test_column_resolution_is_case_insensitive_and_preserves_source_name() -> None:

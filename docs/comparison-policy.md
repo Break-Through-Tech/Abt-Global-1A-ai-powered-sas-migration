@@ -15,8 +15,7 @@ generated and trusted artifacts.
 - Numeric columns use both an absolute tolerance and a relative tolerance.
 - A missing value matches only another missing value. Missing values are different from numeric
   zero and from empty text.
-- Missing or additional rows and columns are always reported. The structural policy determines
-  whether each reported difference also fails the comparison.
+- Missing or additional rows and columns are always reported and always fail the comparison.
 - Ambiguous column names such as `score` and `SCORE` in the same artifact are rejected.
 
 ## Numeric rule
