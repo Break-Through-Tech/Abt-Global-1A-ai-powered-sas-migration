@@ -86,7 +86,8 @@ class ArtifactComparison(BaseModel):
         has_failure = any(
             (
                 self.expected_rows != self.actual_rows,
-                set(self.expected_columns) != set(self.actual_columns),
+                {name.casefold() for name in self.expected_columns}
+                != {name.casefold() for name in self.actual_columns},
                 bool(self.missing_keys),
                 bool(self.extra_keys),
                 bool(self.missing_columns),
