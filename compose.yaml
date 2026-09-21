@@ -12,3 +12,50 @@ services:
     volumes:
       - .:/workspace
       - ./data:/workspace/data:ro
+
+  runner:
+    profiles:
+      - runner
+    build:
+      context: .
+      dockerfile: Dockerfile.runner
+    image: sasguard-runner:local
+    init: true
+    network_mode: none
+    ipc: none
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 64
+    mem_limit: 512m
+    cpus: 1.0
+    ulimits:
+      nofile:
+        soft: 256
+        hard: 256
+    working_dir: /runner/source
+    environment:
+      HOME: /nonexistent
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - type: bind
+        source: ${SASGUARD_GENERATED_DIR:-./generated}
+        target: /runner/source
+        read_only: true
+      - type: bind
+        source: ${SASGUARD_INPUT_DIR:-./data/Project_1/Starrating}
+        target: /runner/input
+        read_only: true
+      - type: bind
+        source: ${SASGUARD_OUTPUT_DIR:-./reports/runner-output}
+        target: /runner/output
+    command:
+      - --script
+      - ${SASGUARD_SCRIPT:-main.py}
+      - --timeout
+      - ${SASGUARD_TIMEOUT_SECONDS:-60}

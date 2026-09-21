@@ -25,3 +25,5 @@ Thumbs.db
 
 # Local outputs
 reports/runs/
+reports/runner-output/
+reports/runner-results/

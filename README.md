@@ -37,7 +37,8 @@ The project is in the Data Exploration and Setup milestone. Current work focuses
 - a maintainable Python package and automated quality checks;
 - inventorying the supplied SAS and data artifacts;
 - documenting the three SAS processing stages;
-- implementing trusted data loading and initial comparison utilities.
+- implementing trusted data loading and initial comparison utilities;
+- protecting supplied artifacts and recording reproducible run metadata.
 
 No end-to-end parity result is claimed at this stage.
 
@@ -57,8 +58,11 @@ No end-to-end parity result is claimed at this stage.
 ```text
 .
 |-- data/                  Supplied input, SAS source, and trusted outputs
+|-- configs/               Protected-artifact and pipeline configuration
 |-- docs/                  Development and team workflow documentation
+|-- generated/             Generated Python entry points
 |-- notebooks/             Exploratory notebooks
+|-- scripts/               Cross-platform runner entry scripts
 |-- src/sasguard/          Installable Python package
 |-- tests/                 Automated tests
 |-- .devcontainer/         VS Code Dev Container configuration
@@ -81,6 +85,7 @@ No end-to-end parity result is claimed at this stage.
 git clone https://github.com/Break-Through-Tech/Abt-Global-1A-ai-powered-sas-migration.git
 Set-Location .\Abt-Global-1A-ai-powered-sas-migration
 docker compose build
+docker compose run --rm sasguard sasguard verify-integrity
 docker compose run --rm sasguard pytest
 docker compose run --rm sasguard sasguard version
 ```
@@ -91,6 +96,7 @@ docker compose run --rm sasguard sasguard version
 git clone https://github.com/Break-Through-Tech/Abt-Global-1A-ai-powered-sas-migration.git
 cd Abt-Global-1A-ai-powered-sas-migration
 docker compose build
+docker compose run --rm sasguard sasguard verify-integrity
 docker compose run --rm sasguard pytest
 docker compose run --rm sasguard sasguard version
 ```
@@ -123,6 +129,17 @@ Python environments, and troubleshooting.
 Supplied SAS programs, input data, and trusted output artifacts are source-of-truth materials.
 Contributors must not modify them to make generated results pass. Comparisons must align records
 by `PROVIDER_ID`, preserve missing values, and explain numerical tolerances.
+
+Run `docker compose run --rm sasguard sasguard verify-integrity` before requesting review. The
+check validates all supplied artifacts against a version-controlled SHA-256 manifest. See
+[Protected artifact integrity](docs/data-integrity.md) for the trust boundary and update policy.
+
+SASGuard also provides versioned models for machine-readable artifact comparisons and run
+provenance. See [Reproducible run manifests](docs/run-manifests.md) for the schema and usage.
+
+Generated Python runs in a separate network-disabled Docker service that cannot access trusted SAS
+outputs. See [Isolated generated-code runner](docs/isolated-runner.md) for its access boundary,
+PowerShell and zsh commands, machine-readable results, and limitations.
 
 ## License
 

@@ -1,0 +1,125 @@
+{
+  "schema_version": 1,
+  "algorithm": "sha256",
+  "protected_roots": [
+    "data/Project_1"
+  ],
+  "files": [
+    {
+      "path": "data/Project_1/SAS Output CSV/LESS100_MEASURE.csv",
+      "sha256": "ae049a45f9cac954fc109a11d486f09a58c4d351825f55a23380f05cf8960a02"
+    },
+    {
+      "path": "data/Project_1/SAS Output CSV/MEASURE_AVERAGE_STDDEV_2025JUL.csv",
+      "sha256": "2ce4671bf1254400fc145143c37b69fee5a894f7e6a232fb955014c5b9cf88f8"
+    },
+    {
+      "path": "data/Project_1/SAS Output CSV/NATIONAL_AVERAGE_2025JUL.csv",
+      "sha256": "d54d9096208262755be6c5521cf9bbdc26c97289043fb2e0c30ffbb1da6e2f84"
+    },
+    {
+      "path": "data/Project_1/SAS Output CSV/OUTCOME_MORTALITY.csv",
+      "sha256": "b34bb8115cdf5dfb1f10ea8d0c80864427f71c3879a79ea9655f78d12bd2545f"
+    },
+    {
+      "path": "data/Project_1/SAS Output CSV/OUTCOME_READMISSION.csv",
+      "sha256": "85a3923eaca27556db1f8cd18b1f20a9f695691cd35716fbdabf7b8251e9217e"
+    },
+    {
+      "path": "data/Project_1/SAS Output CSV/OUTCOME_SAFETY.csv",
+      "sha256": "81a3ae67fc5520288cf8cc48e1333da8736fbbbcd12b043fe258ee97c763af2c"
+    },
+    {
+      "path": "data/Project_1/SAS Output CSV/PROCESS.csv",
+      "sha256": "cfd95aece34c96f87668245e0bde1f520a36318f9c807239234a89c4104a74e6"
+    },
+    {
+      "path": "data/Project_1/SAS Output CSV/PTEXP.csv",
+      "sha256": "696aab68bef793e1ecbb57abaf9742c170388de553f3bc099382d797f7db651b"
+    },
+    {
+      "path": "data/Project_1/SAS Output CSV/STAR_2025JUL.csv",
+      "sha256": "e53582492023cb2ebbd466acd25eab3ee2faea45788373a44127a8c4533a812a"
+    },
+    {
+      "path": "data/Project_1/SAS Output CSV/STD_DATA_2025JUL_ANALYSIS.csv",
+      "sha256": "69ef8885e8500129247d65f709960a4ead9dfa81a1cd2f8ba16d8eeac1783a34"
+    },
+    {
+      "path": "data/Project_1/SAS Output/SAS Output.htm",
+      "sha256": "f9e547f402ffc150b9aef1b02acb060a83fb69707f33f122fe7c27f3064101d5"
+    },
+    {
+      "path": "data/Project_1/SAS Output/less100_measure.sas7bdat",
+      "sha256": "a424dbffe6fb73b3a2abc71f3eb1709134442871007898804ad198ee51164047"
+    },
+    {
+      "path": "data/Project_1/SAS Output/measure_average_stddev_2025jul.sas7bdat",
+      "sha256": "434b8635f069c6dffed520a696d9adc4fbd01635c341eb42a38532f33646ff92"
+    },
+    {
+      "path": "data/Project_1/SAS Output/national_average_2025jul.sas7bdat",
+      "sha256": "a4af1745c6954cdc5bbdf63d4f62501126c481f749d695730c02cfbc765dd7fd"
+    },
+    {
+      "path": "data/Project_1/SAS Output/outcome_mortality.sas7bdat",
+      "sha256": "73be203068780cf10aa9230a3dc95660158501994da13a53ea0d4c77c77eba3b"
+    },
+    {
+      "path": "data/Project_1/SAS Output/outcome_readmission.sas7bdat",
+      "sha256": "7c603b36b1f0f9e7ec0da7d563bbe8add45009240e0e1053f649d79937913f76"
+    },
+    {
+      "path": "data/Project_1/SAS Output/outcome_safety.sas7bdat",
+      "sha256": "efbc9df312466a5d75e6cae2d68bd670fcb81e129ffecf6ef06692fb21f2af0e"
+    },
+    {
+      "path": "data/Project_1/SAS Output/process.sas7bdat",
+      "sha256": "ee0b801d45d4d4a6df90d5d0789b419ec65318977d40c5aec37ed06d85f12d77"
+    },
+    {
+      "path": "data/Project_1/SAS Output/ptexp.sas7bdat",
+      "sha256": "71c08e710317289f92153b994a328bd7d040ba20891df12bca494bbf40994228"
+    },
+    {
+      "path": "data/Project_1/SAS Output/star_2025jul.sas7bdat",
+      "sha256": "200981a22567980cd7140a93c7aa0040b40538f25b58666b098e2096307af1ad"
+    },
+    {
+      "path": "data/Project_1/SAS Output/std_data_2025jul_analysis.sas7bdat",
+      "sha256": "a074615179148bb774494055c45aa858ab23600bafb9b0866bb325ec69afa015"
+    },
+    {
+      "path": "data/Project_1/SAS Programs/0 - Data and Measure Standardization_2025Jul.sas",
+      "sha256": "b02762a257a48740000a01792afc50a38f4ba1493a1e06dfcf940fb9f8046ece"
+    },
+    {
+      "path": "data/Project_1/SAS Programs/1 - First stage_Simple Average of Measure Scores_2025Jul.sas",
+      "sha256": "68a6880f173ea19f0653ec3245f45cadc4c6801bd0f5d8e46b8c325ddfc53332"
+    },
+    {
+      "path": "data/Project_1/SAS Programs/2 - Second Stage_Weighted Average and Categorize Star_2025Jul.sas",
+      "sha256": "7df4aad8fc0a61c0a571730972fa4190616268c94df844af730d5696e4927115"
+    },
+    {
+      "path": "data/Project_1/SAS Programs/SAS_Log.log",
+      "sha256": "12a6caf15f62a29f1374295f992b98eb1a2dd813f9081d7db40581f83b242723"
+    },
+    {
+      "path": "data/Project_1/SAS Programs/Star_Macros.sas",
+      "sha256": "1f9a62fd4b7a07f5acfa18e51946246bcd354e92cce2fb1136d2ec8a2ee67f2c"
+    },
+    {
+      "path": "data/Project_1/StarRatings_SASPackDoc_Jul2025.pdf",
+      "sha256": "e1fdad0e4c9dbde43182005e888d044057fc0a7d19e3dca4104fe6562febab42"
+    },
+    {
+      "path": "data/Project_1/Starrating/alldata_2025jul.csv",
+      "sha256": "8790aa7ef3b39a4724220ed84c52999b77b2c6c4ed8c19b2dc75e76cd62ebd90"
+    },
+    {
+      "path": "data/Project_1/Starrating/alldata_2025jul.sas7bdat",
+      "sha256": "875b1ba9d299e611a58909533b8301d2776ea982ca75937b6746290ee837724f"
+    }
+  ]
+}
