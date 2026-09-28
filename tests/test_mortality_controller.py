@@ -25,6 +25,9 @@ def controller(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> SimpleNamespa
     (root / "configs/cms_2025jul.yaml").write_bytes(
         (policy_path.parent / "cms_2025jul.yaml").read_bytes()
     )
+    (root / "configs/cms-artifact-lineage.json").write_bytes(
+        (policy_path.parent / "cms-artifact-lineage.json").read_bytes()
+    )
     (root / "reference_python/mortality.py").write_text("# reference snapshot\n", encoding="utf-8")
     program = root / "sas/program.sas"
     program.write_text("* supplied source;\n", encoding="utf-8")
@@ -122,6 +125,22 @@ def test_controller_stages_only_inputs_and_preserves_comparison(controller, pass
     assert manifest.model_name is None
     assert manifest.execution_result.status is ExecutionStatus.SUCCEEDED
     assert len(controller.checks) == 3
+    assert report["trace_report"] == "trace.json"
+    trace = json.loads((report_path.parent / "trace.json").read_text(encoding="utf-8"))
+    assert trace["scope_complete"] is False
+    assert trace["all_checked_passed"] is passed
+    assert len(trace["checkpoints"]) == 11
+    checkpoints = {item["artifact"]: item for item in trace["checkpoints"]}
+    boundary = checkpoints["STD_DATA_2025JUL_ANALYSIS"]
+    assert boundary["status"] == "not_checked"
+    assert boundary["supplied_reference_input"] is True
+    assert checkpoints["OUTCOME_MORTALITY"]["status"] == ("passed" if passed else "failed")
+    if passed:
+        assert trace["first_divergences"] == []
+    else:
+        assert [item["artifact"] for item in trace["first_divergences"]] == ["OUTCOME_MORTALITY"]
+        assert trace["first_divergences"][0]["confirmed_within_scope"] is True
+        assert trace["first_divergences"][0]["unchecked_upstream"] == []
 
 
 def test_controller_execution_failure_records_result_without_loading_gold(controller) -> None:
@@ -134,6 +153,11 @@ def test_controller_execution_failure_records_result_without_loading_gold(contro
     assert manifest.execution_result.status is ExecutionStatus.FAILED
     assert not (run_directory / "comparison.json").exists()
     assert len(controller.checks) == 2
+    trace = json.loads((run_directory / "trace.json").read_text(encoding="utf-8"))
+    assert trace["all_checked_passed"] is False
+    assert trace["scope_complete"] is False
+    assert trace["first_divergences"] == []
+    assert all(item["status"] == "not_checked" for item in trace["checkpoints"])
 
 
 def test_controller_rejects_changed_protected_artifacts_before_execution(controller) -> None:
@@ -157,7 +181,10 @@ def test_controller_rejects_postexecution_integrity_failure(controller, monkeypa
     assert controller.loaded == []
 
 
-@pytest.mark.parametrize("filename", ["mortality-comparison-policy.json", "cms_2025jul.yaml"])
+@pytest.mark.parametrize(
+    "filename",
+    ["mortality-comparison-policy.json", "cms_2025jul.yaml", "cms-artifact-lineage.json"],
+)
 def test_controller_rejects_modified_trusted_configuration(controller, filename: str) -> None:
     path = controller.root / "configs" / filename
     path.write_text(path.read_text(encoding="utf-8") + "\n", encoding="utf-8")

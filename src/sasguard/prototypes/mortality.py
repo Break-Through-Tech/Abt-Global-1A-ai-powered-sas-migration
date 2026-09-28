@@ -14,7 +14,9 @@ from sasguard.execution.result import ExecutionStatus
 from sasguard.execution.runner import DockerExecutionRunner
 from sasguard.provenance.hashing import hash_files, sha256_file
 from sasguard.verification import ArtifactComparison, ArtifactComparisonPolicy, compare_artifacts
+from sasguard.verification.golden_trace import trace_artifacts
 from sasguard.verification.integrity import load_and_verify_integrity
+from sasguard.verification.lineage import ArtifactLineage
 
 # This bounded baseline accepts only these reviewed configurations. Updating a
 # policy requires a corresponding trusted-controller change, never an automatic repair.
@@ -22,6 +24,9 @@ _TRUSTED_CONFIGURATION_HASHES = {
     "configs/cms_2025jul.yaml": "d6e16a00a5cc86a2e36079d2dc59dd2ced072f50d4595e4a823575fe80c3a64a",
     "configs/mortality-comparison-policy.json": (
         "632173ce570b38b26ff4f3953474335154f33d3d97dd22492abcca7873a60a26"
+    ),
+    "configs/cms-artifact-lineage.json": (
+        "a9c9a5ceeece017be09332c7612c7dd074f2bfa17098398920ce337520776baf"
     ),
 }
 
@@ -52,6 +57,9 @@ def run_mortality_prototype(
     """
     root = project_root.resolve()
     policy = mortality_policy(root)
+    lineage = ArtifactLineage.model_validate_json(
+        (root / "configs" / "cms-artifact-lineage.json").read_text(encoding="utf-8")
+    )
     integrity = load_and_verify_integrity(root, root / "configs" / "protected-artifacts.json")
     if not integrity.passed:
         raise ValueError("protected-artifact integrity failed before the Mortality run")
@@ -80,6 +88,7 @@ def run_mortality_prototype(
                 source,
                 root / "configs" / "cms_2025jul.yaml",
                 root / "configs" / "mortality-comparison-policy.json",
+                root / "configs" / "cms-artifact-lineage.json",
             )
         ],
     )
@@ -94,6 +103,14 @@ def run_mortality_prototype(
     manifest = RunManifest.create(source_hashes=source_hashes, input_hashes=input_hashes)
     manifest_path = run_directory / "manifest.json"
     manifest_path.write_text(manifest.to_json(), encoding="utf-8")
+    trace_path = run_directory / "trace.json"
+    initial_trace = trace_artifacts(
+        lineage,
+        [],
+        scope="Program 1 Mortality only, supplied Program 0 intermediate",
+        supplied_reference_inputs=["STD_DATA_2025JUL_ANALYSIS"],
+    )
+    trace_path.write_text(initial_trace.to_json(), encoding="utf-8")
 
     execution = DockerExecutionRunner(image=image).run(
         source_directory=staged_source,
@@ -117,6 +134,13 @@ def run_mortality_prototype(
     actual = load_artifact(output / "OUTCOME_MORTALITY.csv", key=config.project.key)
     expected = load_artifact(reference, key=config.project.key)
     comparison = compare_artifacts(actual, expected, artifact="OUTCOME_MORTALITY", policy=policy)
+    trace = trace_artifacts(
+        lineage,
+        [comparison],
+        scope="Program 1 Mortality only, supplied Program 0 intermediate",
+        supplied_reference_inputs=["STD_DATA_2025JUL_ANALYSIS"],
+    )
+    trace_path.write_text(trace.to_json(), encoding="utf-8")
     report_path = run_directory / "comparison.json"
     report = {
         "schema_version": 1,
@@ -127,6 +151,7 @@ def run_mortality_prototype(
         "runner_image": image,
         "reference_sha256": sha256_file(reference),
         "output_sha256": sha256_file(output / "OUTCOME_MORTALITY.csv"),
+        "trace_report": "trace.json",
         "policy": policy.model_dump(mode="json"),
         "comparison": comparison.model_dump(mode="json"),
     }
