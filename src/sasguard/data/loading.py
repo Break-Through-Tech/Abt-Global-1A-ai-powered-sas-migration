@@ -11,7 +11,7 @@ from typing import Any
 import pandas as pd
 import pyreadstat
 
-from sasguard.verification.policy import resolve_column_name
+from sasguard.columns import resolve_column_name
 
 
 class ArtifactFormat(StrEnum):
