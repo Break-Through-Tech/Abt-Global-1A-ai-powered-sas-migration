@@ -7,6 +7,7 @@ from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from sasguard.execution.result import ExecutionResult
 from sasguard.provenance.hashing import normalize_relative_path, validate_sha256
 from sasguard.verification.artifact import ArtifactComparison, ReferenceSource
 
@@ -62,6 +63,7 @@ class RunManifest(BaseModel):
 
     repair_attempts: int = Field(default=0, ge=0)
     runtime_seconds: float = Field(default=0, ge=0, allow_inf_nan=False)
+    execution_result: ExecutionResult | None = None
     reference_sources: dict[str, ReferenceSource] = Field(default_factory=dict)
     artifact_results: dict[str, ArtifactComparison] = Field(default_factory=dict)
 
@@ -112,7 +114,21 @@ class RunManifest(BaseModel):
             source = self.reference_sources.get(artifact)
             if source is not None and source != result.reference_source:
                 raise ValueError(f"reference source for {artifact!r} conflicts with its result")
+        if (
+            self.execution_result is not None
+            and self.runtime_seconds != self.execution_result.runtime_seconds
+        ):
+            raise ValueError("manifest runtime must match its execution result")
         return self
+
+    def with_execution_result(self, result: ExecutionResult) -> Self:
+        """Return a copy populated from an isolated execution result."""
+        return self.model_copy(
+            update={
+                "execution_result": result,
+                "runtime_seconds": result.runtime_seconds,
+            }
+        )
 
     @classmethod
     def create(cls, **values: Any) -> Self:
