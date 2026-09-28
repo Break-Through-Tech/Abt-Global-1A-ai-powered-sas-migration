@@ -8,9 +8,9 @@ from typing import Literal
 
 import pandas as pd
 
+from sasguard.columns import resolve_column_name
 from sasguard.config import ResolvedProjectPaths
 from sasguard.data import load_artifact
-from sasguard.verification.policy import resolve_column_name
 
 DEFAULT_KEY = "PROVIDER_ID"
 
