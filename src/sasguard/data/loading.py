@@ -32,7 +32,8 @@ class LoadedArtifact:
     frame: pd.DataFrame = field(repr=False)
     source_path: Path
     format: ArtifactFormat
-    key_column: str
+    key_column: str | None
+    original_columns: tuple[str, ...] = ()
 
     @property
     def row_count(self) -> int:
@@ -72,20 +73,40 @@ def _parse_text_key(value: str) -> object:
     return pd.NA if value == "" else value
 
 
-def _read_csv(path: Path, key: str) -> tuple[pd.DataFrame, str]:
-    key_column = _resolve_key(key, _read_csv_header(path))
+def _validate_columns(columns: list[str]) -> None:
+    if any(not isinstance(name, str) or not name.strip() for name in columns):
+        raise ArtifactLoadError("artifact column names must be non-blank strings")
+    canonical = [name.upper() for name in columns]
+    if len(set(canonical)) != len(canonical):
+        raise ArtifactLoadError("ambiguous case-insensitive column names")
+
+
+def _selected_key(key: str | None, columns: list[str]) -> str | None:
+    if key is not None:
+        return _resolve_key(key, columns)
+    if any(name.casefold() == "provider_id" for name in columns):
+        return _resolve_key("PROVIDER_ID", columns)
+    return None
+
+
+def _read_csv(path: Path, key: str | None) -> tuple[pd.DataFrame, str | None]:
+    columns = _read_csv_header(path)
+    _validate_columns(columns)
+    key_column = _selected_key(key, columns)
     frame = pd.read_csv(
         path,
-        converters={key_column: _parse_text_key},
+        converters={key_column: _parse_text_key} if key_column is not None else {},
         low_memory=False,
     )
     return frame, key_column
 
 
-def _read_sas7bdat(path: Path, key: str) -> tuple[pd.DataFrame, str]:
+def _read_sas7bdat(path: Path, key: str | None) -> tuple[pd.DataFrame, str | None]:
     loaded: tuple[pd.DataFrame, Any] = pyreadstat.read_sas7bdat(path)
     frame, _metadata = loaded
-    key_column = _resolve_key(key, list(frame.columns))
+    columns = list(frame.columns)
+    _validate_columns(columns)
+    key_column = _selected_key(key, columns)
     return frame, key_column
 
 
@@ -103,8 +124,12 @@ def _normalize_text_key(frame: pd.DataFrame, key_column: str, path: Path) -> pd.
     return normalized
 
 
-def load_artifact(path: Path, *, key: str) -> LoadedArtifact:
-    """Load one artifact and preserve its textual comparison key and missing values."""
+def load_artifact(path: Path, *, key: str | None = None) -> LoadedArtifact:
+    """Load a table with uppercase names, optional textual keys, and missing values.
+
+    An explicitly requested key must exist. With no requested key, PROVIDER_ID is
+    protected as text when present, and unkeyed summary artifacts are supported.
+    """
     source_path = path.resolve()
     if not source_path.is_file():
         raise FileNotFoundError(f"artifact file does not exist: {path}")
@@ -115,10 +140,17 @@ def load_artifact(path: Path, *, key: str) -> LoadedArtifact:
     else:
         frame, key_column = _read_sas7bdat(source_path, key)
 
-    normalized = _normalize_text_key(frame, key_column, source_path)
+    original_columns = tuple(frame.columns)
+    normalized = (
+        _normalize_text_key(frame, key_column, source_path)
+        if key_column is not None
+        else frame.copy(deep=False)
+    )
+    normalized.columns = [name.upper() for name in original_columns]
     return LoadedArtifact(
         frame=normalized,
         source_path=source_path,
         format=artifact_format,
-        key_column=key_column,
+        key_column=key_column.upper() if key_column is not None else None,
+        original_columns=original_columns,
     )
