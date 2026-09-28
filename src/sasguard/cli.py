@@ -84,10 +84,13 @@ def mortality_prototype(
     scope = "Program 1 Mortality only, supplied Program 0 intermediate"
     if comparison.passed:
         typer.echo(f"Mortality prototype passed. Scope: {scope}. Report: {report_path}")
-        return
-
-    typer.echo(f"Mortality prototype comparison failed. Scope: {scope}. Report: {report_path}")
-    raise typer.Exit(code=1)
+    else:
+        typer.echo(f"Mortality prototype comparison failed. Scope: {scope}. Report: {report_path}")
+    typer.echo(
+        f"Trace: {report_path.with_name('trace.json')}. Other pipeline outputs are not checked."
+    )
+    if not comparison.passed:
+        raise typer.Exit(code=1)
 
 
 if __name__ == "__main__":  # pragma: no cover

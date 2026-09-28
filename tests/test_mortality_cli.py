@@ -48,6 +48,8 @@ def test_mortality_cli_reports_scope_and_comparison(
     assert "Mortality prototype passed" in result.stdout
     assert "Program 1 Mortality only, supplied Program 0 intermediate" in result.stdout
     assert str(report_path) in result.stdout
+    assert str(report_path.with_name("trace.json")) in result.stdout
+    assert "Other pipeline outputs are not checked" in result.stdout
     assert "PROVIDER_ID" not in result.stdout
     assert received == {"project_root": tmp_path, "image": "runner:test"}
 

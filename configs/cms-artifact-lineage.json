@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "nodes": [
+    {"name": "ALLDATA_2025JUL", "parents": []},
+    {"name": "LESS100_MEASURE", "parents": ["ALLDATA_2025JUL"]},
+    {
+      "name": "MEASURE_AVERAGE_STDDEV_2025JUL",
+      "parents": ["ALLDATA_2025JUL", "LESS100_MEASURE"]
+    },
+    {
+      "name": "STD_DATA_2025JUL_ANALYSIS",
+      "parents": ["ALLDATA_2025JUL", "LESS100_MEASURE"]
+    },
+    {"name": "OUTCOME_MORTALITY", "parents": ["STD_DATA_2025JUL_ANALYSIS"]},
+    {"name": "OUTCOME_SAFETY", "parents": ["STD_DATA_2025JUL_ANALYSIS"]},
+    {"name": "OUTCOME_READMISSION", "parents": ["STD_DATA_2025JUL_ANALYSIS"]},
+    {"name": "PTEXP", "parents": ["STD_DATA_2025JUL_ANALYSIS"]},
+    {"name": "PROCESS", "parents": ["STD_DATA_2025JUL_ANALYSIS"]},
+    {
+      "name": "STAR_2025JUL",
+      "parents": [
+        "STD_DATA_2025JUL_ANALYSIS",
+        "OUTCOME_MORTALITY", "OUTCOME_SAFETY", "OUTCOME_READMISSION", "PTEXP", "PROCESS"
+      ]
+    },
+    {
+      "name": "NATIONAL_AVERAGE_2025JUL",
+      "parents": [
+        "STAR_2025JUL",
+        "OUTCOME_MORTALITY", "OUTCOME_SAFETY", "OUTCOME_READMISSION", "PTEXP", "PROCESS"
+      ]
+    }
+  ]
+}
