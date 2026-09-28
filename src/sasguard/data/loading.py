@@ -97,6 +97,7 @@ def _read_csv(path: Path, key: str | None) -> tuple[pd.DataFrame, str | None]:
         path,
         converters={key_column: _parse_text_key} if key_column is not None else {},
         low_memory=False,
+        float_precision="round_trip",
     )
     return frame, key_column
 

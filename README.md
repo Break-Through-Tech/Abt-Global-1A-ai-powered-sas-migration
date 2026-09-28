@@ -42,6 +42,14 @@ The project is in the Data Exploration and Setup milestone. Current work focuses
 
 No end-to-end parity result is claimed at this stage.
 
+A bounded human-reference prototype reproduces the Program 1 Mortality
+`grp_score` calculation on the supplied Program 0 standardized SAS binary. Its
+first Docker run passed the comparison of 4,566 rows and 21 columns against the
+trusted Mortality output. This is not an LLM translation and does not establish
+full end-to-end correctness or coverage of all SAS semantics. See
+[Mortality prototype](docs/mortality-prototype.md) for its comparison rules,
+setup, and limits.
+
 ## Team
 
 | Name | GitHub | Initial milestone focus |
@@ -61,6 +69,7 @@ No end-to-end parity result is claimed at this stage.
 |-- configs/               Protected-artifact and pipeline configuration
 |-- docs/                  Development and team workflow documentation
 |-- generated/             Generated Python entry points
+|-- reference_python/      Human-reference implementation for the Mortality prototype
 |-- notebooks/             Exploratory notebooks
 |-- scripts/               Cross-platform runner entry scripts
 |-- src/sasguard/          Installable Python package
