@@ -19,11 +19,13 @@ def test_csv_preserves_identifier_text_and_numeric_missingness(tmp_path: Path) -
     artifact = load_artifact(source, key="PROVIDER_ID")
 
     assert artifact.format is ArtifactFormat.CSV
-    assert artifact.key_column == "provider_id"
-    assert artifact.frame["provider_id"].dtype == pd.StringDtype()
-    assert artifact.frame["provider_id"].tolist() == ["00123", "00007"]
-    assert pd.isna(artifact.frame.loc[1, "score"])
-    assert artifact.frame.loc[0, "score"] == 1.5
+    assert artifact.key_column == "PROVIDER_ID"
+    assert artifact.original_columns == ("provider_id", "score", "label")
+    assert artifact.columns == ("PROVIDER_ID", "SCORE", "LABEL")
+    assert artifact.frame["PROVIDER_ID"].dtype == pd.StringDtype()
+    assert artifact.frame["PROVIDER_ID"].tolist() == ["00123", "00007"]
+    assert pd.isna(artifact.frame.loc[1, "SCORE"])
+    assert artifact.frame.loc[0, "SCORE"] == 1.5
     assert source.read_text(encoding="utf-8") == original
     assert "frame=" not in repr(artifact)
     assert "00123" not in repr(artifact)
@@ -46,7 +48,7 @@ def test_csv_identifier_that_looks_like_default_na_remains_text(tmp_path: Path) 
     artifact = load_artifact(source, key="PROVIDER_ID")
 
     assert artifact.frame["PROVIDER_ID"].tolist() == ["NA", "N/A"]
-    assert pd.isna(artifact.frame["score"].iloc[0])
+    assert pd.isna(artifact.frame["SCORE"].iloc[0])
 
 
 @pytest.mark.parametrize(

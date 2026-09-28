@@ -7,13 +7,19 @@ artifacts. Loading does not compare values and never writes to the source file.
 
 - `.csv` and `.sas7bdat` files are supported.
 - The configured comparison key resolves case-insensitively.
-- The original spelling of every column remains unchanged.
+- SAS column names become uppercase. `original_columns` records their source spelling.
 - Comparison keys use pandas' nullable string type.
 - Leading zeros in CSV identifiers remain significant.
 - A missing identifier remains missing instead of becoming the text `"nan"` or `"<NA>"`.
 - Numeric missing values remain missing and are never replaced with zero.
 - Missing and ambiguous key columns produce explicit errors.
+- Case-insensitive collisions anywhere in the schema produce explicit errors.
+- With no explicit key, reference summary tables without provider IDs can load. When a
+  `PROVIDER_ID` column is present, it still receives identifier protection.
 - Unsupported formats and missing files produce explicit errors.
+
+The configured convenience functions in `sasguard.loaders` delegate to this implementation.
+They validate format dispatch and support case-insensitive reference artifact names.
 
 The loader does not assert that keys are non-missing or unique. Those are comparison-time
 requirements because diagnostics must distinguish a loading failure from an invalid comparison
