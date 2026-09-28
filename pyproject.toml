@@ -42,6 +42,9 @@ where = ["src"]
 [tool.pytest.ini_options]
 addopts = "-ra --strict-config --strict-markers"
 testpaths = ["tests"]
+markers = [
+    "docker_integration: tests requiring a locally available Docker daemon",
+]
 
 [tool.ruff]
 line-length = 100
