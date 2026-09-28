@@ -35,6 +35,10 @@ columns for the supplied cohort under the committed policy.
 ## Trust boundary and reports
 
 The host controller verifies the protected-artifact manifest before and after the run.
+It also checks the project configuration and comparison policy against the frozen hashes
+in the trusted controller, before execution and validation. Changes to either file require
+an explicit controller-baseline update and teammate review. Automatic repair must not
+edit these trusted files or the controller.
 It snapshots only `mortality.py` into `source/` and the Program 0 intermediate into `input/`.
 It hashes the staged copies and checks them against the originals before execution. The
 run manifest records hashes for the SAS programs, SAS macro, project configuration,

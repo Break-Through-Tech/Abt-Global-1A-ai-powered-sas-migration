@@ -22,7 +22,9 @@ def controller(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> SimpleNamespa
         (root / directory).mkdir(parents=True)
     policy_path = Path(__file__).resolve().parents[1] / "configs/mortality-comparison-policy.json"
     (root / "configs/mortality-comparison-policy.json").write_bytes(policy_path.read_bytes())
-    (root / "configs/cms_2025jul.yaml").write_text("fixture\n", encoding="utf-8")
+    (root / "configs/cms_2025jul.yaml").write_bytes(
+        (policy_path.parent / "cms_2025jul.yaml").read_bytes()
+    )
     (root / "reference_python/mortality.py").write_text("# reference snapshot\n", encoding="utf-8")
     program = root / "sas/program.sas"
     program.write_text("* supplied source;\n", encoding="utf-8")
@@ -152,4 +154,31 @@ def test_controller_rejects_postexecution_integrity_failure(controller, monkeypa
     with pytest.raises(ValueError, match="after the Mortality run"):
         prototype.run_mortality_prototype(controller.root)
     assert controller.mounts is not None
+    assert controller.loaded == []
+
+
+@pytest.mark.parametrize("filename", ["mortality-comparison-policy.json", "cms_2025jul.yaml"])
+def test_controller_rejects_modified_trusted_configuration(controller, filename: str) -> None:
+    path = controller.root / "configs" / filename
+    path.write_text(path.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="frozen controller baseline"):
+        prototype.run_mortality_prototype(controller.root)
+    assert controller.mounts is None
+    assert controller.loaded == []
+
+
+def test_controller_rejects_policy_changed_during_execution(controller, monkeypatch) -> None:
+    original_run = prototype.DockerExecutionRunner.run
+
+    def change_policy(self, **mounts):
+        result = original_run(self, **mounts)
+        path = controller.root / "configs/mortality-comparison-policy.json"
+        policy = json.loads(path.read_text(encoding="utf-8"))
+        policy["columns"][-1]["tolerance"]["absolute"] = 100
+        path.write_text(json.dumps(policy), encoding="utf-8")
+        return result
+
+    monkeypatch.setattr(prototype.DockerExecutionRunner, "run", change_policy)
+    with pytest.raises(ValueError, match="frozen controller baseline"):
+        prototype.run_mortality_prototype(controller.root)
     assert controller.loaded == []

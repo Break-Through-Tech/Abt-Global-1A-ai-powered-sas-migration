@@ -16,9 +16,25 @@ from sasguard.provenance.hashing import hash_files, sha256_file
 from sasguard.verification import ArtifactComparison, ArtifactComparisonPolicy, compare_artifacts
 from sasguard.verification.integrity import load_and_verify_integrity
 
+# This bounded baseline accepts only these reviewed configurations. Updating a
+# policy requires a corresponding trusted-controller change, never an automatic repair.
+_TRUSTED_CONFIGURATION_HASHES = {
+    "configs/cms_2025jul.yaml": "d6e16a00a5cc86a2e36079d2dc59dd2ced072f50d4595e4a823575fe80c3a64a",
+    "configs/mortality-comparison-policy.json": (
+        "632173ce570b38b26ff4f3953474335154f33d3d97dd22492abcca7873a60a26"
+    ),
+}
+
+
+def _require_frozen_configuration(project_root: Path) -> None:
+    observed = hash_files(project_root, _TRUSTED_CONFIGURATION_HASHES)
+    if observed != _TRUSTED_CONFIGURATION_HASHES:
+        raise ValueError("Mortality configuration differs from the frozen controller baseline")
+
 
 def mortality_policy(project_root: Path) -> ArtifactComparisonPolicy:
     """Load the committed artifact-specific policy before executing the reference."""
+    _require_frozen_configuration(project_root)
     return ArtifactComparisonPolicy.model_validate_json(
         (project_root / "configs" / "mortality-comparison-policy.json").read_text(encoding="utf-8")
     )
@@ -94,6 +110,7 @@ def run_mortality_prototype(
     after = load_and_verify_integrity(root, root / "configs" / "protected-artifacts.json")
     if not after.passed:
         raise ValueError("protected-artifact integrity failed after the Mortality run")
+    _require_frozen_configuration(root)
     if execution.status is not ExecutionStatus.SUCCEEDED:
         raise RuntimeError(f"Mortality execution failed: {execution.status}; see {run_directory}")
 
@@ -117,6 +134,7 @@ def run_mortality_prototype(
     after = load_and_verify_integrity(root, root / "configs" / "protected-artifacts.json")
     if not after.passed:
         raise ValueError("protected-artifact integrity failed after the Mortality run")
+    _require_frozen_configuration(root)
     manifest = manifest.model_copy(
         update={
             "reference_sources": {comparison.artifact: comparison.reference_source},
