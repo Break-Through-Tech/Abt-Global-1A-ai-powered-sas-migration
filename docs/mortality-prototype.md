@@ -135,3 +135,18 @@ Remove-Item Env:SASGUARD_RUN_DOCKER_TESTS
 The opt-in suite includes a Docker replay regression for the Mortality comparison as well
 as tests of the shared isolated runner. The replay checks that the supplied reference
 continues to match the trusted artifact under the committed comparison policy.
+
+A negative integration regression copies the required project files into a temporary
+directory and changes only that copy of the reference implementation to use `ddof=0`
+instead of `ddof=1`. It runs the real CLI and Docker controller without replacing the
+runner, comparator, or trace with mocks. The generated process must exit successfully,
+but the comparison must fail on `STDDEV` and `GRP_SCORE`, and the CLI must return status 1.
+GoldenTrace must identify `OUTCOME_MORTALITY` as the earliest failed checkpoint within
+the bounded scope. The supplied Program 0 input remains an explicit boundary, and the
+other pipeline outputs remain unchecked. This does not identify the faulty code line
+or establish full-pipeline localization.
+
+The test verifies that the original implementation, protected artifacts, configuration,
+policies, lineage, lockfiles, and build definitions remain unchanged. It also checks the
+copied protected artifacts and trusted configuration after the run. This is one
+failure-path regression, not a mutation benchmark or a model-backed repair experiment.
