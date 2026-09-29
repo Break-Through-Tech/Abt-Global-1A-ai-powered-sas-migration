@@ -8,6 +8,7 @@ from uuid import uuid4
 import pytest
 
 import sasguard.prototypes.mortality as prototype
+from sasguard.execution.environment import DockerRuntimeEnvironment, PythonEnvironment
 from sasguard.execution.manifest import RunManifest
 from sasguard.execution.result import ExecutionResult, ExecutionStatus
 from sasguard.provenance.hashing import sha256_file
@@ -29,6 +30,15 @@ def controller(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> SimpleNamespa
         (policy_path.parent / "cms-artifact-lineage.json").read_bytes()
     )
     (root / "reference_python/mortality.py").write_text("# reference snapshot\n", encoding="utf-8")
+    for filename in (
+        "pyproject.toml",
+        "uv.lock",
+        "requirements.lock",
+        "requirements-runtime.lock",
+        "Dockerfile",
+        "Dockerfile.runner",
+    ):
+        (root / filename).write_text(f"fixture for {filename}\n", encoding="utf-8")
     program = root / "sas/program.sas"
     program.write_text("* supplied source;\n", encoding="utf-8")
     intermediate = root / "gold/std_data_2025jul_analysis.sas7bdat"
@@ -57,6 +67,19 @@ def controller(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> SimpleNamespa
         status=ExecutionStatus.SUCCEEDED,
         intact=True,
         passed=True,
+        runtime_environment=DockerRuntimeEnvironment(
+            requested_image="sasguard-runner:test",
+            image_id="sha256:" + "d" * 64,
+            repo_digests=["example/sasguard@sha256:" + "e" * 64],
+            operating_system="linux",
+            architecture="amd64",
+            python=PythonEnvironment(
+                python_version="3.11.9",
+                operating_system="Linux",
+                architecture="x86_64",
+                packages={"numpy": "2.1.0"},
+            ),
+        ),
     )
 
     def integrity(*args):
@@ -80,6 +103,7 @@ def controller(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> SimpleNamespa
             status=state.status,
             exit_code=0 if state.status is ExecutionStatus.SUCCEEDED else 7,
             runtime_seconds=0.1,
+            runtime_environment=state.runtime_environment,
         )
 
     def load(path, **kwargs):
@@ -121,9 +145,25 @@ def test_controller_stages_only_inputs_and_preserves_comparison(controller, pass
     manifest = RunManifest.model_validate_json((report_path.parent / "manifest.json").read_text())
     assert manifest.artifact_results["OUTCOME_MORTALITY"].passed is passed
     assert manifest.source_hashes and manifest.input_hashes
+    for filename in (
+        "pyproject.toml",
+        "uv.lock",
+        "requirements.lock",
+        "requirements-runtime.lock",
+        "Dockerfile",
+        "Dockerfile.runner",
+    ):
+        assert filename in manifest.source_hashes
+    assert manifest.controller_environment is not None
+    assert manifest.controller_environment.python_version
+    assert manifest.controller_environment.packages
     assert manifest.generated_code_hashes == {}
     assert manifest.model_name is None
     assert manifest.execution_result.status is ExecutionStatus.SUCCEEDED
+    assert manifest.execution_result.runtime_environment == controller.runtime_environment
+    assert report["runner_environment"]["image_id"] == controller.runtime_environment.image_id
+    assert report["runner_environment"]["python"]["packages"] == {"numpy": "2.1.0"}
+    assert report["runner_image"] == "sasguard-runner:test"
     assert len(controller.checks) == 3
     assert report["trace_report"] == "trace.json"
     trace = json.loads((report_path.parent / "trace.json").read_text(encoding="utf-8"))

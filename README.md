@@ -146,6 +146,11 @@ check validates all supplied artifacts against a version-controlled SHA-256 mani
 SASGuard also provides versioned models for machine-readable artifact comparisons and run
 provenance. See [Reproducible run manifests](docs/run-manifests.md) for the schema and usage.
 
+Dependency lockfiles pin the Python packages used in development and runner builds.
+Mortality runs record the controller and container environments and execute a resolved
+immutable Docker image ID. See [Reproducing a verified run](docs/reproducibility.md)
+for lockfile updates, image replay, and rebuild limits.
+
 The Mortality prototype also writes a deterministic artifact trace. The trace shows which
 declared artifact checkpoints passed, failed, or were not checked, and reports the earliest
 observed failures in the checked graph. It does not infer SAS statement-level causes. See

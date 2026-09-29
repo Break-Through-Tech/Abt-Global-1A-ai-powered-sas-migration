@@ -22,23 +22,32 @@ jobs:
           python-version: "3.11"
           cache: pip
 
-      - name: Install project
-        run: python -m pip install --editable ".[dev]"
+      - name: Install locked project dependencies
+        run: |
+          python -m pip install uv==0.8.22
+          uv sync --locked --no-build-isolation --group build --extra dev --no-install-project
+          uv sync --locked --no-build-isolation --group build --extra dev
+
+      - name: Verify exported dependency locks
+        run: |
+          uv export --locked --format requirements-txt --all-extras --all-groups --no-emit-project --output-file requirements.lock
+          uv export --locked --format requirements-txt --no-dev --no-default-groups --no-emit-project --output-file requirements-runtime.lock
+          git diff --exit-code -- uv.lock requirements.lock requirements-runtime.lock
 
       - name: Lint
-        run: ruff check .
+        run: uv run --no-sync ruff check .
 
       - name: Check formatting
-        run: ruff format --check .
+        run: uv run --no-sync ruff format --check .
 
       - name: Type-check
-        run: mypy
+        run: uv run --no-sync mypy
 
       - name: Verify protected artifacts
-        run: sasguard verify-integrity
+        run: uv run --no-sync sasguard verify-integrity
 
       - name: Test
-        run: pytest
+        run: uv run --no-sync pytest
 
   runner-integration:
     runs-on: ubuntu-latest
@@ -52,8 +61,11 @@ jobs:
           python-version: "3.11"
           cache: pip
 
-      - name: Install project
-        run: python -m pip install --editable ".[dev]"
+      - name: Install locked project dependencies
+        run: |
+          python -m pip install uv==0.8.22
+          uv sync --locked --no-build-isolation --group build --extra dev --no-install-project
+          uv sync --locked --no-build-isolation --group build --extra dev
 
       - name: Build isolated runner image
         run: docker build --file Dockerfile.runner --tag sasguard-runner:test .
@@ -61,4 +73,4 @@ jobs:
       - name: Test isolated runner boundaries
         env:
           SASGUARD_RUN_DOCKER_TESTS: "1"
-        run: pytest -m docker_integration
+        run: uv run --no-sync pytest -m docker_integration
