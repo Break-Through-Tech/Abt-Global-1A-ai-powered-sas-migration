@@ -7,6 +7,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from sasguard.execution.environment import DockerRuntimeEnvironment
 from sasguard.provenance.hashing import normalize_relative_path
 
 
@@ -34,6 +35,7 @@ class ExecutionResult(BaseModel):
     stderr: str = ""
     output_files: list[str] = Field(default_factory=list)
     policy_violations: list[str] = Field(default_factory=list)
+    runtime_environment: DockerRuntimeEnvironment | None = None
 
     @field_validator("output_files")
     @classmethod
