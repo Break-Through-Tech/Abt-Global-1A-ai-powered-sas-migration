@@ -141,9 +141,9 @@ golden-output CSV names are uppercase. Rows and columns are identical within eve
 
 ## Integrity hashes
 
-SHA-256 hashes of every supplied file, for use by the protected-artifact integrity checks (#16).
-`.gitattributes` normalizes text files to LF line endings, so these hashes are the same on every
-platform.
+SHA-256 hashes of every supplied file. These match the protected-artifact manifest
+(`configs/protected-artifacts.json`) from the integrity-check work in #16. That manifest is the
+authoritative source for integrity checks; this table is for reference.
 
 | File | SHA-256 |
 |---|---|
@@ -195,8 +195,8 @@ pair matches in rows and columns.
    (lines 15–17). The folder names in those paths (`SAS output`, `SAS pack`) also differ from the
    repository layout (`SAS Output`, `SAS Programs`). The programs cannot run as supplied without
    editing these lines.
-2. **Session state.** Programs 1 and 2 depend on macros and variables defined in Program 0, so they
-   cannot run on their own.
+2. **Session state.** Programs 1 and 2 depend on macros and variables defined in earlier programs,
+   so they cannot run on their own.
 3. **Empty exclusion list.** `less100_measure` has 0 rows because no measure was reported by 100 or
    fewer hospitals in this release. This is expected. It also causes the log's only warning (line
    329, `MEASURE_EXCLUDE not resolved`), which Program 0 handles with a conditional drop
