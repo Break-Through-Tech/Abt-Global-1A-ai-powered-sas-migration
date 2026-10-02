@@ -3,9 +3,12 @@
 from pathlib import Path
 from typing import Annotated
 
+import pyreadstat
 import typer
 
 from sasguard import __version__
+from sasguard.config import load_project_configuration
+from sasguard.program0 import translate_program0
 from sasguard.verification.integrity import load_and_verify_integrity
 
 app = typer.Typer(
@@ -60,6 +63,67 @@ def verify_integrity(
         for path in paths:
             typer.echo(f"{label}: {path}", err=True)
     raise typer.Exit(code=1)
+
+
+@app.command("run-program0")
+def run_program0(
+    project_root: Annotated[
+        Path,
+        typer.Option(help="Repository root containing the supplied Program 0 input."),
+    ] = Path("."),
+    output_directory: Annotated[
+        Path,
+        typer.Option(help="Output directory under reports/runs in the repository."),
+    ] = Path("reports/runs/program0"),
+) -> None:
+    """Write the three Program 0 Python outputs without reading reference values."""
+    root = project_root.resolve()
+    runs_root = (root / "reports" / "runs").resolve()
+    data_root = (root / "data").resolve()
+    destination = output_directory if output_directory.is_absolute() else root / output_directory
+    destination = destination.resolve()
+    if (
+        destination == runs_root
+        or not destination.is_relative_to(runs_root)
+        or not runs_root.is_relative_to(root)
+        or runs_root.is_relative_to(data_root)
+        or destination.is_relative_to(data_root)
+    ):
+        typer.echo("Program 0 output must be in a subdirectory of reports/runs.", err=True)
+        raise typer.Exit(code=2)
+
+    output_names = (
+        "less100_measure.csv",
+        "measure_average_stddev_2025jul.csv",
+        "std_data_2025jul_analysis.csv",
+    )
+    if any(
+        (destination / name).exists() or (destination / name).is_symlink() for name in output_names
+    ):
+        typer.echo("Program 0 output already exists; choose a new output directory.", err=True)
+        raise typer.Exit(code=2)
+
+    try:
+        configuration = load_project_configuration(
+            root / "configs" / "cms_2025jul.yaml", project_root=root
+        )
+        paths = configuration.resolve_paths(root)
+        source, _ = pyreadstat.read_sas7bdat(paths.input_sas7bdat)
+        result = translate_program0(source)
+        destination.mkdir(parents=True, exist_ok=True)
+        for name, frame in zip(
+            output_names,
+            (result.excluded_measures, result.raw_statistics, result.analysis),
+            strict=True,
+        ):
+            frame.to_csv(destination / name, index=False, float_format="%.17g")
+    except (OSError, ValueError) as error:
+        typer.echo(f"Program 0 run failed: {error}", err=True)
+        raise typer.Exit(code=2) from error
+
+    typer.echo(
+        f"Program 0 wrote three outputs for {len(result.analysis)} hospitals to {destination}."
+    )
 
 
 if __name__ == "__main__":  # pragma: no cover
