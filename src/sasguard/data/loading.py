@@ -107,6 +107,11 @@ def _read_sas7bdat(path: Path, key: str | None) -> tuple[pd.DataFrame, str | Non
     columns = list(frame.columns)
     _validate_columns(columns)
     key_column = _selected_key(key, columns)
+    # pyreadstat returns missing SAS character values as empty strings.
+    # Match the missing values produced by pandas for empty CSV fields.
+    for column in frame.select_dtypes(include=["object", "string"]).columns:
+        values = frame[column]
+        frame[column] = values.mask(values.eq(""), pd.NA)
     return frame, key_column
 
 
