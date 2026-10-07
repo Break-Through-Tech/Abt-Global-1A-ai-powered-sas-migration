@@ -13,6 +13,7 @@ PORTABLE_TEXT_EXTENSIONS = frozenset(
         ".html",
         ".json",
         ".log",
+        ".lock",
         ".md",
         ".py",
         ".sas",
@@ -58,7 +59,11 @@ def sha256_file(
         raise ValueError("chunk_size must be positive")
 
     if normalize_text is None:
-        normalize_text = path.suffix.lower() in PORTABLE_TEXT_EXTENSIONS
+        normalize_text = (
+            path.suffix.lower() in PORTABLE_TEXT_EXTENSIONS
+            or path.name == "Dockerfile"
+            or path.name.startswith("Dockerfile.")
+        )
 
     digest = hashlib.sha256()
     trailing_carriage_return = b""

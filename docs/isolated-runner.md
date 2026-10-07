@@ -1,4 +1,4 @@
-# Isolated Generated-Code Runner
+# Isolated generated-code runner
 
 SASGuard executes generated Python in a dedicated Docker container with explicit access and
 resource boundaries. The runner is intentionally described as an isolated execution runner. It is
@@ -36,13 +36,18 @@ Every execution uses:
 
 - no network namespace connectivity;
 - a read-only container root filesystem;
-- a non-root user;
 - all Linux capabilities dropped;
 - `no-new-privileges` enabled;
 - no shared IPC namespace;
 - 1 CPU, 512 MB memory, 64 processes, and 256 open files by default;
 - an internal execution timeout of 60 seconds by default;
 - a host-side timeout and forced container cleanup as a fallback.
+
+The committed runner image runs as user `65532:65532`. On non-Windows hosts, the Python
+controller uses the non-root host UID when available so generated files stay writable
+by that user. Custom images control their default user on Windows or when the host UID
+is root. Only trusted team members should select custom images, and those images must
+configure a non-root user. The environment probe uses the image's configured user.
 
 Generated code can create files only in `/runner/output`. Escaping output symlinks are reported as
 policy violations and are not accepted as produced artifacts.
@@ -108,6 +113,13 @@ The result records:
 
 `ExecutionResult` can be attached to a versioned `RunManifest` through
 `RunManifest.with_execution_result()`.
+
+The Python `DockerExecutionRunner` also resolves a local tag to its immutable image ID,
+probes that ID for Python and package versions before executing generated code, and adds
+the metadata to `runtime_environment`. It launches the generated code with the same ID
+and disables automatic image pulls. A failed preflight stops execution. The older shell
+scripts above still launch through Compose and do not record this controller metadata.
+See [Reproducing a verified run](reproducibility.md) for the recorded fields and replay steps.
 
 ## Verification
 

@@ -1,15 +1,17 @@
 FROM python:3.11-slim AS builder
 
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    PIP_NO_CACHE_DIR=1
+    PIP_NO_CACHE_DIR=1 \
+    UV_PROJECT_ENVIRONMENT=/opt/build-venv
 
 WORKDIR /build
 
-COPY pyproject.toml README.md ./
+COPY pyproject.toml uv.lock README.md ./
 COPY src ./src
 
-RUN python -m pip install --upgrade pip \
-    && python -m pip wheel --no-deps --wheel-dir /wheels .
+RUN python -m pip install --no-cache-dir uv==0.8.22 \
+    && uv sync --locked --no-build-isolation --no-default-groups --group build --no-install-project \
+    && uv run --no-sync python -m build --no-isolation --wheel --outdir /wheels
 
 
 FROM python:3.11-slim
@@ -27,8 +29,9 @@ RUN groupadd --gid 65532 runner \
         --shell /usr/sbin/nologin runner
 
 COPY --from=builder /wheels /wheels
-RUN python -m pip install --upgrade pip \
-    && python -m pip install /wheels/sasguard-*.whl \
+COPY requirements-runtime.lock ./requirements-runtime.lock
+RUN python -m pip install --require-hashes -r requirements-runtime.lock \
+    && python -m pip install --no-deps /wheels/sasguard-*.whl \
     && rm -rf /wheels
 
 WORKDIR /runner/source

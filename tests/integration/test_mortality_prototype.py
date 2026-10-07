@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -71,6 +72,26 @@ def test_human_reference_replay_compares_mortality_output() -> None:
     assert all(len(digest) == 64 for digest in manifest["input_hashes"].values())
     assert manifest["execution_result"]["status"] == "succeeded"
     assert manifest["execution_result"]["output_files"] == ["OUTCOME_MORTALITY.csv"]
+    assert manifest["controller_environment"]["python_version"]
+    assert manifest["controller_environment"]["packages"]
+    assert "sasguard" in manifest["controller_environment"]["packages"]
+    runtime_environment = manifest["execution_result"]["runtime_environment"]
+    assert runtime_environment["requested_image"] == report["runner_image"]
+    assert runtime_environment["image_id"].startswith("sha256:")
+    assert runtime_environment["repo_digests"] == sorted(runtime_environment["repo_digests"])
+    assert runtime_environment["python"]["python_version"]
+    runtime_packages = runtime_environment["python"]["packages"]
+    assert {"numpy", "pandas", "pyreadstat"} <= runtime_packages.keys()
+    assert report["runner_environment"] == runtime_environment
+    execution = json.loads((run_directory / "execution.json").read_text(encoding="utf-8"))
+    assert execution["runtime_environment"] == runtime_environment
+    inspected = subprocess.run(
+        ["docker", "image", "inspect", "--", report["runner_image"]],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert json.loads(inspected.stdout)[0]["Id"] == runtime_environment["image_id"]
     assert manifest["generated_code_hashes"] == {}
     assert "model" not in manifest
     assert sorted(path.name for path in (run_directory / "source").iterdir()) == ["mortality.py"]

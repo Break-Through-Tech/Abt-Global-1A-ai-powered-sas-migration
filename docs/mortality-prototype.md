@@ -52,11 +52,18 @@ network access and receives no host credentials through its environment.
 Each run writes to a unique `reports/runs/mortality-<UUID>/` directory. It contains
 `manifest.json`, `execution.json`, `comparison.json`, `trace.json`, the staged `source/mortality.py`,
 the staged input, and generated output. The comparison report records the requested
-runner image tag and SHA-256 hashes for the trusted reference file and generated output.
-The requested image tag is mutable and does not pin an image digest. Reports include the
+runner image, its resolved immutable local image ID, available repository digests,
+container Python and package versions, and SHA-256 hashes for the trusted reference file
+and generated output. The runner probes and executes the resolved image ID with automatic
+pulls disabled. The manifest also records the host controller's environment and hashes
+the dependency lockfiles and Docker build definitions. Reports include the
 selected policy and comparison results, but do not copy raw trusted-output rows into the
 report. The generated output and staged input are local run artifacts and should be
 handled according to the repository's data-handling requirements.
+
+See [Reproducing a verified run](reproducibility.md) for exact-image replay and rebuild
+limits. An image ID identifies a local image; it is not necessarily a downloadable
+registry digest.
 
 The controller writes an initially unchecked `trace.json` before execution, then updates
 it after validation. Execution failures keep the unchecked trace. It records the full
@@ -85,8 +92,8 @@ On macOS with zsh:
 ```zsh
 python3.11 -m venv .venv
 source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -e '.[dev]'
+python -m pip install --require-hashes -r requirements.txt
+python -m pip install --no-deps --no-build-isolation -e .
 docker build -f Dockerfile.runner -t sasguard-runner:test .
 sasguard mortality-prototype --project-root . --image sasguard-runner:test
 ```
@@ -96,8 +103,8 @@ On Windows PowerShell:
 ```powershell
 py -3.11 -m venv .venv
 .\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-python -m pip install -e ".[dev]"
+python -m pip install --require-hashes -r requirements.txt
+python -m pip install --no-deps --no-build-isolation -e .
 docker build -f Dockerfile.runner -t sasguard-runner:test .
 sasguard mortality-prototype --project-root . --image sasguard-runner:test
 ```

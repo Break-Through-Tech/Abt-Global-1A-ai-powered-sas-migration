@@ -9,6 +9,7 @@ from uuid import uuid4
 
 from sasguard.config import load_project_configuration
 from sasguard.data import load_artifact
+from sasguard.execution.environment import collect_python_environment
 from sasguard.execution.manifest import RunManifest
 from sasguard.execution.result import ExecutionStatus
 from sasguard.execution.runner import DockerExecutionRunner
@@ -89,6 +90,12 @@ def run_mortality_prototype(
                 root / "configs" / "cms_2025jul.yaml",
                 root / "configs" / "mortality-comparison-policy.json",
                 root / "configs" / "cms-artifact-lineage.json",
+                root / "pyproject.toml",
+                root / "uv.lock",
+                root / "requirements.lock",
+                root / "requirements-runtime.lock",
+                root / "Dockerfile",
+                root / "Dockerfile.runner",
             )
         ],
     )
@@ -100,7 +107,11 @@ def run_mortality_prototype(
         != source_hashes[source.relative_to(root).as_posix()]
     ):
         raise ValueError("staged Mortality code does not match its reference implementation")
-    manifest = RunManifest.create(source_hashes=source_hashes, input_hashes=input_hashes)
+    manifest = RunManifest.create(
+        source_hashes=source_hashes,
+        input_hashes=input_hashes,
+        controller_environment=collect_python_environment(),
+    )
     manifest_path = run_directory / "manifest.json"
     manifest_path.write_text(manifest.to_json(), encoding="utf-8")
     trace_path = run_directory / "trace.json"
@@ -149,6 +160,11 @@ def run_mortality_prototype(
         "input_artifact": "STD_DATA_2025JUL_ANALYSIS",
         "reference_artifact": "OUTCOME_MORTALITY",
         "runner_image": image,
+        "runner_environment": (
+            execution.runtime_environment.model_dump(mode="json")
+            if execution.runtime_environment is not None
+            else None
+        ),
         "reference_sha256": sha256_file(reference),
         "output_sha256": sha256_file(output / "OUTCOME_MORTALITY.csv"),
         "trace_report": "trace.json",

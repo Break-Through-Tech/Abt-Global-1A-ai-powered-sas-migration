@@ -1,1 +1,2 @@
--e .[dev,notebooks]
+# Locked, hash-checked dependencies for development and notebooks.
+-r requirements.lock
