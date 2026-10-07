@@ -150,3 +150,13 @@ def test_supplied_csv_and_sas_inputs_load_with_equivalent_schemas() -> None:
     assert csv_artifact.row_count == sas_artifact.row_count
     assert csv_artifact.columns == sas_artifact.columns
     assert csv_artifact.row_count > 0
+
+
+def test_csv_round_trip_preserves_seventeen_digit_floats(tmp_path: Path) -> None:
+    source = tmp_path / "precise.csv"
+    values = [0.30000000000000004, 1.0000000000000002, -0.9999999999999999]
+    pd.DataFrame({"PROVIDER_ID": ["00001", "00002", "00003"], "VALUE": values}).to_csv(
+        source, index=False, float_format="%.17g"
+    )
+    artifact = load_artifact(source, key="PROVIDER_ID")
+    assert artifact.frame["VALUE"].tolist() == values

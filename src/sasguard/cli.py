@@ -6,6 +6,7 @@ from typing import Annotated
 import typer
 
 from sasguard import __version__
+from sasguard.prototypes.mortality import run_mortality_prototype
 from sasguard.verification.integrity import load_and_verify_integrity
 
 app = typer.Typer(
@@ -59,6 +60,33 @@ def verify_integrity(
     ):
         for path in paths:
             typer.echo(f"{label}: {path}", err=True)
+    raise typer.Exit(code=1)
+
+
+@app.command("mortality-prototype")
+def mortality_prototype(
+    project_root: Annotated[
+        Path,
+        typer.Option(help="Repository root containing the Mortality prototype inputs."),
+    ] = Path("."),
+    image: Annotated[
+        str,
+        typer.Option(help="Docker image used to run the reference implementation."),
+    ] = "sasguard-runner:test",
+) -> None:
+    """Run the bounded human-reference Mortality comparison."""
+    try:
+        comparison, report_path = run_mortality_prototype(project_root, image=image)
+    except (OSError, ValueError, RuntimeError) as error:
+        typer.echo(f"Mortality prototype could not run: {error}", err=True)
+        raise typer.Exit(code=2) from error
+
+    scope = "Program 1 Mortality only, supplied Program 0 intermediate"
+    if comparison.passed:
+        typer.echo(f"Mortality prototype passed. Scope: {scope}. Report: {report_path}")
+        return
+
+    typer.echo(f"Mortality prototype comparison failed. Scope: {scope}. Report: {report_path}")
     raise typer.Exit(code=1)
 
 
