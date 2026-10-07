@@ -146,6 +146,11 @@ check validates all supplied artifacts against a version-controlled SHA-256 mani
 SASGuard also provides versioned models for machine-readable artifact comparisons and run
 provenance. See [Reproducible run manifests](docs/run-manifests.md) for the schema and usage.
 
+The Mortality prototype also writes a deterministic artifact trace. The trace shows which
+declared artifact checkpoints passed, failed, or were not checked, and reports the earliest
+observed failures in the checked graph. It does not infer SAS statement-level causes. See
+[Golden artifact traces](docs/golden-trace.md) for the status rules and limits.
+
 Generated Python runs in a separate network-disabled Docker service that cannot access trusted SAS
 outputs. See [Isolated generated-code runner](docs/isolated-runner.md) for its access boundary,
 PowerShell and zsh commands, machine-readable results, and limitations.

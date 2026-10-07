@@ -35,27 +35,38 @@ columns for the supplied cohort under the committed policy.
 ## Trust boundary and reports
 
 The host controller verifies the protected-artifact manifest before and after the run.
-It also checks the project configuration and comparison policy against the frozen hashes
-in the trusted controller, before execution and validation. Changes to either file require
+It also checks the project configuration, comparison policy, and lineage configuration
+against the frozen hashes in the trusted controller, before execution and validation.
+Changes to these files require
 an explicit controller-baseline update and teammate review. Automatic repair must not
 edit these trusted files or the controller.
 It snapshots only `mortality.py` into `source/` and the Program 0 intermediate into `input/`.
 It hashes the staged copies and checks them against the originals before execution. The
 run manifest records hashes for the SAS programs, SAS macro, project configuration,
-comparison policy, reference implementation, and input. It records execution details and
+comparison policy, lineage configuration, reference implementation, and input. It records execution details and
 the reference source and artifact comparison after those results are available.
 The trusted Mortality output is never mounted in Docker. The controller loads that output
 and performs the comparison on the host after the container exits. The runner has no
 network access and receives no host credentials through its environment.
 
 Each run writes to a unique `reports/runs/mortality-<UUID>/` directory. It contains
-`manifest.json`, `execution.json`, `comparison.json`, the staged `source/mortality.py`,
+`manifest.json`, `execution.json`, `comparison.json`, `trace.json`, the staged `source/mortality.py`,
 the staged input, and generated output. The comparison report records the requested
 runner image tag and SHA-256 hashes for the trusted reference file and generated output.
 The requested image tag is mutable and does not pin an image digest. Reports include the
 selected policy and comparison results, but do not copy raw trusted-output rows into the
 report. The generated output and staged input are local run artifacts and should be
 handled according to the repository's data-handling requirements.
+
+The controller writes an initially unchecked `trace.json` before execution, then updates
+it after validation. Execution failures keep the unchecked trace. It records the full
+CMS artifact graph, the Mortality comparison result, and the supplied Program 0
+`STD_DATA_2025JUL_ANALYSIS` artifact as an explicit trusted boundary. The controller
+compares no other graph nodes during this prototype run. Those nodes remain unchecked, so
+the trace is incomplete for the full graph even when the Mortality comparison passes.
+The trace records that a trusted input was supplied; it does not count that boundary as a
+Python comparison pass. See [Golden artifact traces](golden-trace.md) for status and
+frontier rules.
 
 The comparison key is `PROVIDER_ID`. Input column names are normalized to uppercase by
 the reference implementation, and duplicate names that collide after uppercasing are

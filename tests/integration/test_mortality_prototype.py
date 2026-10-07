@@ -46,6 +46,17 @@ def test_human_reference_replay_compares_mortality_output() -> None:
     assert report["comparison"]["passed"] is True
     assert report["comparison"]["expected_rows"] == 4566
     assert len(report["comparison"]["actual_columns"]) == 21
+    assert report["trace_report"] == "trace.json"
+    trace = json.loads((report_path.parent / "trace.json").read_text(encoding="utf-8"))
+    assert trace["all_checked_passed"] is True
+    assert trace["scope_complete"] is False
+    assert trace["first_divergences"] == []
+    assert len(trace["checkpoints"]) == 11
+    assert len(trace["not_checked_artifacts"]) == 10
+    checkpoints = {item["artifact"]: item for item in trace["checkpoints"]}
+    assert checkpoints["OUTCOME_MORTALITY"]["status"] == "passed"
+    assert checkpoints["STD_DATA_2025JUL_ANALYSIS"]["status"] == "not_checked"
+    assert checkpoints["STD_DATA_2025JUL_ANALYSIS"]["supplied_reference_input"] is True
 
     run_directory = report_path.parent
     manifest = json.loads((run_directory / "manifest.json").read_text(encoding="utf-8"))
@@ -55,6 +66,7 @@ def test_human_reference_replay_compares_mortality_output() -> None:
         "data/Project_1/SAS Output/std_data_2025jul_analysis.sas7bdat"
     }
     assert manifest["source_hashes"]
+    assert "configs/cms-artifact-lineage.json" in manifest["source_hashes"]
     assert all(len(digest) == 64 for digest in manifest["source_hashes"].values())
     assert all(len(digest) == 64 for digest in manifest["input_hashes"].values())
     assert manifest["execution_result"]["status"] == "succeeded"
