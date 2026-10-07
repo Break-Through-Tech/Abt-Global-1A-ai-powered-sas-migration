@@ -5,6 +5,7 @@ import math
 import pytest
 from pydantic import ValidationError
 
+from sasguard.columns import resolve_column_name
 from sasguard.verification.policy import (
     ArtifactComparisonPolicy,
     ColumnComparisonPolicy,
@@ -12,7 +13,6 @@ from sasguard.verification.policy import (
     NumericTolerance,
     StructuralMismatchAction,
     StructuralPolicy,
-    resolve_column_name,
 )
 
 
@@ -125,6 +125,9 @@ def test_column_resolution_is_case_insensitive_and_preserves_source_name() -> No
 
 
 def test_column_resolution_reports_missing_and_ambiguous_names() -> None:
+    with pytest.raises(ValueError, match="column names must not be blank"):
+        resolve_column_name("  ", ["PROVIDER_ID"])
+
     with pytest.raises(KeyError, match="comparison column not found"):
         resolve_column_name("STAR", ["PROVIDER_ID"])
 
