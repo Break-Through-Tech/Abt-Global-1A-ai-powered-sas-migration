@@ -33,6 +33,13 @@ notebooks = [
     "jupyterlab>=4,<5",
 ]
 
+[dependency-groups]
+build = [
+    "build==1.2.2.post1",
+    "setuptools==75.8.2",
+    "wheel==0.45.1",
+]
+
 [project.scripts]
 sasguard = "sasguard.cli:app"
 
@@ -57,3 +64,6 @@ select = ["B", "E", "F", "I", "UP"]
 python_version = "3.11"
 strict = true
 files = ["src/sasguard"]
+
+[tool.uv]
+required-version = "==0.8.22"

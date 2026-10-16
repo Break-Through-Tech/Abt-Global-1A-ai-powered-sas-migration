@@ -42,6 +42,14 @@ The setup milestone established:
 
 Current work is the first translation sprint. The [Program 0 Python translation](docs/program-0-python.md) matches the three supplied July 2025 SAS outputs within a documented numeric tolerance. It is a human-written baseline, not a general SAS translator or a full-pipeline parity result.
 
+A bounded human-reference prototype reproduces the Program 1 Mortality
+`grp_score` calculation on the supplied Program 0 standardized SAS binary. Its
+first Docker run passed the comparison of 4,566 rows and 21 columns against the
+trusted Mortality output. This is not an LLM translation and does not establish
+full end-to-end correctness or coverage of all SAS semantics. See
+[Mortality prototype](docs/mortality-prototype.md) for its comparison rules,
+setup, and limits.
+
 ## Team
 
 | Name | GitHub | Initial milestone focus |
@@ -61,6 +69,7 @@ Current work is the first translation sprint. The [Program 0 Python translation]
 |-- configs/               Protected-artifact and pipeline configuration
 |-- docs/                  Development and team workflow documentation
 |-- generated/             Generated Python entry points
+|-- reference_python/      Human-reference implementation for the Mortality prototype
 |-- notebooks/             Exploratory notebooks
 |-- scripts/               Cross-platform runner entry scripts
 |-- src/sasguard/          Installable Python package
@@ -136,6 +145,16 @@ check validates all supplied artifacts against a version-controlled SHA-256 mani
 
 SASGuard also provides versioned models for machine-readable artifact comparisons and run
 provenance. See [Reproducible run manifests](docs/run-manifests.md) for the schema and usage.
+
+Dependency lockfiles pin the Python packages used in development and runner builds.
+Mortality runs record the controller and container environments and execute a resolved
+immutable Docker image ID. See [Reproducing a verified run](docs/reproducibility.md)
+for lockfile updates, image replay, and rebuild limits.
+
+The Mortality prototype also writes a deterministic artifact trace. The trace shows which
+declared artifact checkpoints passed, failed, or were not checked, and reports the earliest
+observed failures in the checked graph. It does not infer SAS statement-level causes. See
+[Golden artifact traces](docs/golden-trace.md) for the status rules and limits.
 
 Generated Python runs in a separate network-disabled Docker service that cannot access trusted SAS
 outputs. See [Isolated generated-code runner](docs/isolated-runner.md) for its access boundary,

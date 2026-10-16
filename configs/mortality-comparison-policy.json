@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "keys": ["PROVIDER_ID"],
+  "columns": [
+    {"name": "C1", "kind": "exact"},
+    {"name": "C2", "kind": "exact"},
+    {"name": "C3", "kind": "exact"},
+    {"name": "C4", "kind": "exact"},
+    {"name": "C5", "kind": "exact"},
+    {"name": "C6", "kind": "exact"},
+    {"name": "C7", "kind": "exact"},
+    {"name": "TOTAL_CNT", "kind": "exact"},
+    {"name": "STD_MORT_30_AMI", "kind": "exact"},
+    {"name": "STD_MORT_30_CABG", "kind": "exact"},
+    {"name": "STD_MORT_30_COPD", "kind": "exact"},
+    {"name": "STD_MORT_30_HF", "kind": "exact"},
+    {"name": "STD_MORT_30_PN", "kind": "exact"},
+    {"name": "STD_MORT_30_STK", "kind": "exact"},
+    {"name": "STD_PSI_4_SURG_COMP", "kind": "exact"},
+    {"name": "MEASURE_WT", "kind": "numeric", "tolerance": {"absolute": 1e-12, "relative": 1e-12}},
+    {"name": "SCORE_BEFORE_STD", "kind": "numeric", "tolerance": {"absolute": 1e-12, "relative": 1e-12}},
+    {"name": "MEAN", "kind": "numeric", "tolerance": {"absolute": 1e-12, "relative": 1e-12}},
+    {"name": "STDDEV", "kind": "numeric", "tolerance": {"absolute": 1e-12, "relative": 1e-12}},
+    {"name": "GRP_SCORE", "kind": "numeric", "tolerance": {"absolute": 1e-12, "relative": 1e-12}}
+  ]
+}

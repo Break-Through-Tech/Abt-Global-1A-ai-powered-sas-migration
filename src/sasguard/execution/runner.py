@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -11,6 +12,12 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from sasguard.execution.environment import (
+    PYTHON_ENVIRONMENT_PROBE,
+    DockerImageIdentity,
+    DockerRuntimeEnvironment,
+    PythonEnvironment,
+)
 from sasguard.execution.result import ExecutionResult, ExecutionStatus
 
 
@@ -103,6 +110,17 @@ class DockerExecutionRunner:
                 )
 
         container_name = f"sasguard-runner-{execution_id}"
+        started = time.monotonic()
+        try:
+            environment = self._inspect_environment()
+        except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as error:
+            return ExecutionResult(
+                execution_id=execution_id,
+                status=ExecutionStatus.RUNNER_ERROR,
+                exit_code=None,
+                runtime_seconds=time.monotonic() - started,
+                stderr=f"runner environment preflight failed: {error}",
+            )
         command = self._docker_command(
             container_name=container_name,
             execution_id=str(execution_id),
@@ -110,9 +128,9 @@ class DockerExecutionRunner:
             input_directory=input_path,
             output=output,
             script=script,
+            image_id=environment.image_id,
         )
 
-        started = time.monotonic()
         try:
             completed = subprocess.run(
                 command,
@@ -131,6 +149,16 @@ class DockerExecutionRunner:
                 runtime_seconds=time.monotonic() - started,
                 stdout=_timeout_output(error.stdout),
                 stderr=_timeout_output(error.stderr),
+                runtime_environment=environment,
+            )
+        except OSError as error:
+            return ExecutionResult(
+                execution_id=execution_id,
+                status=ExecutionStatus.RUNNER_ERROR,
+                exit_code=None,
+                runtime_seconds=time.monotonic() - started,
+                stderr=f"Docker execution could not start: {error}",
+                runtime_environment=environment,
             )
 
         if completed.returncode != 0:
@@ -141,21 +169,95 @@ class DockerExecutionRunner:
                 runtime_seconds=time.monotonic() - started,
                 stdout=completed.stdout,
                 stderr=completed.stderr or "runner did not produce an execution result",
+                runtime_environment=environment,
             )
 
         try:
-            result = ExecutionResult.model_validate_json(completed.stdout)
-        except ValueError as error:
+            payload = json.loads(completed.stdout)
+            # Never accept environment claims from the generated-code container.
+            payload["runtime_environment"] = environment.model_dump(mode="json")
+            result = ExecutionResult.model_validate(payload)
+        except (ValueError, TypeError) as error:
             return ExecutionResult(
                 execution_id=execution_id,
                 status=ExecutionStatus.RUNNER_ERROR,
                 exit_code=completed.returncode,
                 runtime_seconds=time.monotonic() - started,
                 stderr=f"runner produced an invalid execution result: {error}",
+                runtime_environment=environment,
             )
         if result.execution_id != execution_id:
             raise ValueError("runner result execution ID does not match its request")
         return result
+
+    def _inspect_environment(self) -> DockerRuntimeEnvironment:
+        """Resolve a local image once and probe that exact ID without data mounts."""
+        inspected = subprocess.run(
+            [self.docker_executable, "image", "inspect", "--", self.image],
+            capture_output=True,
+            text=True,
+            errors="replace",
+            timeout=30,
+            check=True,
+        )
+        images = json.loads(inspected.stdout)
+        if not isinstance(images, list) or len(images) != 1:
+            raise ValueError("Docker inspection must return exactly one image")
+        image = images[0]
+        # Validate all daemon metadata before using the identity in a Docker command.
+        identity = DockerImageIdentity(
+            requested_image=self.image,
+            image_id=image["Id"],
+            repo_digests=image.get("RepoDigests") or [],
+            operating_system=image["Os"],
+            architecture=image["Architecture"],
+        )
+        probe_name = f"sasguard-environment-{uuid4()}"
+        try:
+            probed = subprocess.run(
+                [
+                    self.docker_executable,
+                    "run",
+                    "--name",
+                    probe_name,
+                    "--rm",
+                    "--pull",
+                    "never",
+                    "--network",
+                    "none",
+                    "--read-only",
+                    "--cap-drop",
+                    "ALL",
+                    "--security-opt",
+                    "no-new-privileges:true",
+                    "--ipc",
+                    "none",
+                    "--pids-limit",
+                    "32",
+                    "--memory",
+                    "128m",
+                    "--cpus",
+                    "0.5",
+                    "--entrypoint",
+                    "python",
+                    identity.image_id,
+                    "-I",
+                    "-c",
+                    PYTHON_ENVIRONMENT_PROBE,
+                ],
+                capture_output=True,
+                text=True,
+                errors="replace",
+                timeout=30,
+                check=True,
+            )
+        except subprocess.TimeoutExpired:
+            self._force_remove(probe_name)
+            raise
+        return DockerRuntimeEnvironment(
+            **identity.model_dump(),
+            python=PythonEnvironment.model_validate_json(probed.stdout),
+        )
 
     def _docker_command(
         self,
@@ -166,6 +268,7 @@ class DockerExecutionRunner:
         input_directory: Path,
         output: Path,
         script: str,
+        image_id: str,
     ) -> list[str]:
         command = [
             self.docker_executable,
@@ -173,6 +276,8 @@ class DockerExecutionRunner:
             "--name",
             container_name,
             "--rm",
+            "--pull",
+            "never",
             "--network",
             "none",
             "--read-only",
@@ -201,7 +306,7 @@ class DockerExecutionRunner:
                 f"type=bind,src={input_directory},dst=/runner/input,readonly",
                 "--mount",
                 f"type=bind,src={output},dst=/runner/output",
-                self.image,
+                image_id,
                 "--script",
                 script,
                 "--timeout",
@@ -213,8 +318,14 @@ class DockerExecutionRunner:
         return command
 
     def _force_remove(self, container_name: str) -> None:
-        subprocess.run(
-            [self.docker_executable, "rm", "--force", container_name],
-            capture_output=True,
-            check=False,
-        )
+        try:
+            subprocess.run(
+                [self.docker_executable, "rm", "--force", container_name],
+                capture_output=True,
+                timeout=10,
+                check=False,
+            )
+        except (OSError, subprocess.SubprocessError):
+            # Cleanup must not hide the original timeout. A failed Docker daemon
+            # can leave a named container that needs manual removal later.
+            pass

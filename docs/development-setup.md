@@ -1,7 +1,9 @@
 # Development setup
 
-Docker is the canonical development environment for SASGuard. It provides one Python and
-dependency environment across Windows, macOS, VS Code, and continuous integration.
+Docker is the canonical development environment for SASGuard. The builds and continuous
+integration use committed dependency locks. Platform-specific packages can differ between
+Windows, macOS, and Linux. See [Reproducing a verified run](reproducibility.md) for
+environment records and the limits of rebuilding an image.
 
 ## Windows with PowerShell
 
@@ -112,8 +114,8 @@ used for editor integration or quick development.
 ```powershell
 py -3.11 -m venv .venv
 .\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
+python -m pip install --require-hashes -r requirements.txt
+python -m pip install --no-deps --no-build-isolation -e .
 pytest
 ```
 
@@ -122,8 +124,8 @@ pytest
 ```zsh
 python3.11 -m venv .venv
 source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
+python -m pip install --require-hashes -r requirements.txt
+python -m pip install --no-deps --no-build-isolation -e .
 pytest
 ```
 
@@ -136,7 +138,7 @@ docker compose run --rm sasguard pytest
 docker compose down
 ```
 
-Rebuild after changing project dependencies:
+Regenerate and review the lockfiles after changing project dependencies, then rebuild:
 
 ```bash
 docker compose build --no-cache
@@ -156,8 +158,10 @@ version without a server version means the engine is not ready.
 
 ### Dependencies appear out of date
 
-Run `docker compose build --no-cache`, then rerun the checks. Do not install packages manually in a
-running project container without adding them to `pyproject.toml`.
+Check that your branch includes the intended dependency lockfiles, then run
+`docker compose build --no-cache` and rerun the checks. A rebuild uses the committed pins;
+it does not update dependencies. Do not install packages manually in a running project
+container without updating `pyproject.toml` and the lockfiles through review.
 
 ### A test cannot write inside `data/`
 

@@ -1,6 +1,8 @@
 """Tests for reproducible SASGuard run manifests."""
 
 import json
+import re
+import tomllib
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID
@@ -59,6 +61,41 @@ def test_binary_hashes_preserve_line_ending_bytes(tmp_path: Path) -> None:
     unix_hash = sha256_file(binary_path)
 
     assert windows_hash != unix_hash
+
+
+def test_lockfile_hashes_are_portable_across_line_endings(tmp_path: Path) -> None:
+    lockfile = tmp_path / "requirements-runtime.lock"
+    lockfile.write_bytes(b"package==1.0\r\n\n")
+    windows_hash = sha256_file(lockfile)
+
+    lockfile.write_bytes(b"package==1.0\n\n")
+
+    assert windows_hash == sha256_file(lockfile)
+
+
+def test_dockerfile_hashes_are_portable_across_line_endings(tmp_path: Path) -> None:
+    dockerfile = tmp_path / "Dockerfile"
+    dockerfile.write_bytes(b"FROM python:3.11\r\nRUN python -V\r\n")
+    windows_hash = sha256_file(dockerfile)
+
+    dockerfile.write_bytes(b"FROM python:3.11\nRUN python -V\n")
+
+    assert windows_hash == sha256_file(dockerfile)
+
+
+def test_runtime_export_versions_match_the_locked_uv_packages() -> None:
+    repository = Path(__file__).resolve().parents[2]
+    uv_lock = tomllib.loads((repository / "uv.lock").read_text(encoding="utf-8"))
+    locked_packages = {(package["name"], package["version"]) for package in uv_lock["package"]}
+    exported_packages: set[tuple[str, str]] = set()
+    for line in (repository / "requirements-runtime.lock").read_text(encoding="utf-8").splitlines():
+        match = re.match(r"^([A-Za-z0-9_.-]+)==([^ ;\\]+)", line)
+        if match:
+            name = re.sub(r"[-_.]+", "-", match.group(1)).lower()
+            exported_packages.add((name, match.group(2)))
+
+    assert exported_packages
+    assert exported_packages <= locked_packages
 
 
 def test_run_manifest_serializes_deterministically() -> None:
@@ -120,6 +157,57 @@ def test_manifest_can_attach_an_isolated_execution_result() -> None:
     assert updated.execution_result == execution
     assert updated.runtime_seconds == 1.5
     assert json.loads(updated.to_json())["execution_result"]["status"] == "succeeded"
+
+
+def test_manifest_embeds_controller_and_container_environments() -> None:
+    from sasguard.execution.environment import DockerRuntimeEnvironment, PythonEnvironment
+
+    host = PythonEnvironment(
+        python_version="3.12.2",
+        operating_system="Windows",
+        architecture="AMD64",
+        packages={"sasguard": "0.1.0"},
+    )
+    container = DockerRuntimeEnvironment(
+        requested_image="sasguard-runner:test",
+        image_id="sha256:" + "a" * 64,
+        repo_digests=["example/sasguard@sha256:" + "b" * 64],
+        python=PythonEnvironment(
+            python_version="3.11.9",
+            operating_system="Linux",
+            architecture="x86_64",
+            packages={"numpy": "2.1.0"},
+        ),
+        operating_system="Linux",
+        architecture="x86_64",
+    )
+    manifest = RunManifest.create(
+        source_hashes={"source.sas": "a" * 64},
+        input_hashes={"input.csv": "b" * 64},
+        controller_environment=host,
+    )
+    result = ExecutionResult(
+        execution_id=UUID("12345678-1234-5678-1234-567812345678"),
+        status=ExecutionStatus.SUCCEEDED,
+        exit_code=0,
+        runtime_seconds=1.5,
+        runtime_environment=container,
+    )
+
+    updated = manifest.with_execution_result(result)
+    payload = json.loads(updated.to_json())
+
+    assert payload["controller_environment"]["packages"] == {"sasguard": "0.1.0"}
+    assert payload["execution_result"]["runtime_environment"]["image_id"] == container.image_id
+
+
+def test_manifest_controller_environment_is_optional_for_old_records() -> None:
+    manifest = RunManifest.create(
+        source_hashes={"source.sas": "a" * 64},
+        input_hashes={"input.csv": "b" * 64},
+    )
+
+    assert manifest.controller_environment is None
 
 
 def test_manifest_rejects_partial_translation_metadata() -> None:

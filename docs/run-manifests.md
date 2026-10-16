@@ -1,4 +1,4 @@
-# Reproducible Run Manifests
+# Reproducible run manifests
 
 Every meaningful SASGuard execution should produce a versioned run manifest. The manifest records
 how the run was created and evaluated without storing source contents, input records, golden
@@ -15,6 +15,9 @@ Each manifest records:
 - model name, temperature, and prompt version when translation is used;
 - optional token usage and estimated cost;
 - repair-attempt count and runtime;
+- optional host controller Python, platform, and installed package versions;
+- the isolated execution result, including host-collected Docker image identity and
+  container package versions when the Python controller runs it;
 - the reference source used for each compared artifact;
 - structured `ArtifactComparison` results.
 
@@ -81,3 +84,11 @@ committed.
 
 The current schema version is `1`. A breaking field or meaning change requires a new schema
 version and migration notes. Existing run records must remain readable.
+
+`controller_environment` and `execution_result.runtime_environment` are optional additions
+to schema version 1. Earlier records remain readable without them. The Mortality controller
+populates both for runs made through the Python runner. Missing environment metadata means
+the record cannot identify the interpreter, packages, or Docker image used.
+
+See [Reproducing a verified run](reproducibility.md) for image-ID replay, dependency
+locking, and the differences between the Python controller and older Compose scripts.

@@ -68,3 +68,14 @@ def test_output_paths_are_normalized_and_must_be_relative() -> None:
             runtime_seconds=1,
             output_files=["../outside.csv"],
         )
+
+
+def test_runtime_environment_is_optional_for_older_results() -> None:
+    result = ExecutionResult(
+        execution_id=EXECUTION_ID,
+        status="succeeded",
+        exit_code=0,
+        runtime_seconds=1,
+    )
+
+    assert result.runtime_environment is None

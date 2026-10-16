@@ -100,6 +100,10 @@ print("complete")
         os.environ.pop("SECRET_TEST_VALUE", None)
 
     assert result.status is ExecutionStatus.SUCCEEDED
+    assert result.runtime_environment is not None
+    assert result.runtime_environment.image_id.startswith("sha256:")
+    assert result.runtime_environment.python.python_version
+    assert result.runtime_environment.python.packages
     assert result.exit_code == 0
     assert result.stdout == "complete\n"
     assert result.output_files == ["result.txt"]
@@ -124,6 +128,7 @@ def test_failure_is_captured(tmp_path: Path, runner: DockerExecutionRunner) -> N
     )
 
     assert result.status is ExecutionStatus.FAILED
+    assert result.runtime_environment is not None
     assert result.exit_code == 7
     assert result.stdout == "failed output\n"
     assert result.stderr == "details\n"
@@ -148,6 +153,7 @@ def test_timeout_terminates_and_is_reported(tmp_path: Path) -> None:
     )
 
     assert result.status is ExecutionStatus.TIMED_OUT
+    assert result.runtime_environment is not None
     assert result.exit_code is None
     assert result.runtime_seconds < 5
 
@@ -176,4 +182,5 @@ output = Path(os.environ["SASGUARD_OUTPUT_DIR"])
     )
 
     assert result.status is ExecutionStatus.POLICY_VIOLATION
+    assert result.runtime_environment is not None
     assert result.policy_violations == ["output symlink escapes allowed directory: escape"]

@@ -7,6 +7,7 @@ from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from sasguard.execution.environment import PythonEnvironment
 from sasguard.execution.result import ExecutionResult
 from sasguard.provenance.hashing import normalize_relative_path, validate_sha256
 from sasguard.verification.artifact import ArtifactComparison, ReferenceSource
@@ -64,6 +65,7 @@ class RunManifest(BaseModel):
     repair_attempts: int = Field(default=0, ge=0)
     runtime_seconds: float = Field(default=0, ge=0, allow_inf_nan=False)
     execution_result: ExecutionResult | None = None
+    controller_environment: PythonEnvironment | None = None
     reference_sources: dict[str, ReferenceSource] = Field(default_factory=dict)
     artifact_results: dict[str, ArtifactComparison] = Field(default_factory=dict)
 
