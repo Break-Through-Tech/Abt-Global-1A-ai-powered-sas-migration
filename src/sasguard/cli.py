@@ -6,6 +6,7 @@ from typing import Annotated
 import typer
 
 from sasguard import __version__
+from sasguard.prototypes.local_model import run_local_model_smoke, run_local_model_suite
 from sasguard.prototypes.mortality import run_mortality_prototype
 from sasguard.verification.integrity import load_and_verify_integrity
 
@@ -90,6 +91,59 @@ def mortality_prototype(
         f"Trace: {report_path.with_name('trace.json')}. Other pipeline outputs are not checked."
     )
     if not comparison.passed:
+        raise typer.Exit(code=1)
+
+
+@app.command("local-model-smoke")
+def local_model_smoke(
+    project_root: Annotated[
+        Path, typer.Option(help="Repository root for local run records.")
+    ] = Path("."),
+    model: Annotated[str, typer.Option(help="Exact installed Ollama model tag.")] = "qwen3:4b",
+    image: Annotated[str, typer.Option(help="Existing isolated Docker runner image.")] = (
+        "sasguard-runner:local"
+    ),
+    case: Annotated[
+        str,
+        typer.Option(help="double-score, missing-comparison, sum-missing, or grouped-mean."),
+    ] = "double-score",
+) -> None:
+    """Test one local model on synthetic SAS, with Docker execution and host validation."""
+    try:
+        passed, report = run_local_model_smoke(project_root, model=model, image=image, case=case)
+    except (OSError, ValueError) as error:
+        typer.echo(f"Local model smoke test could not start: {error}", err=True)
+        raise typer.Exit(code=2) from error
+    typer.echo(
+        f"Synthetic local model smoke test {'passed' if passed else 'failed'}. Report: {report}"
+    )
+    if not passed:
+        raise typer.Exit(code=1)
+
+
+@app.command("local-model-suite")
+def local_model_suite(
+    project_root: Annotated[
+        Path, typer.Option(help="Repository root for local run records.")
+    ] = Path("."),
+    models: Annotated[
+        list[str] | None,
+        typer.Option("--model", help="Installed model tag; repeat for comparisons."),
+    ] = None,
+    image: Annotated[str, typer.Option(help="Existing isolated Docker runner image.")] = (
+        "sasguard-runner:local"
+    ),
+) -> None:
+    """Run all synthetic cases once per local model and save a comparison index."""
+    try:
+        passed, report = run_local_model_suite(
+            project_root, models=tuple(models or ["qwen3:4b"]), image=image
+        )
+    except (OSError, ValueError) as error:
+        typer.echo(f"Local model suite could not start: {error}", err=True)
+        raise typer.Exit(code=2) from error
+    typer.echo(f"Synthetic local model suite {'passed' if passed else 'failed'}. Report: {report}")
+    if not passed:
         raise typer.Exit(code=1)
 
 
