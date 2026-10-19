@@ -8,21 +8,22 @@ import pytest
 
 @pytest.mark.parametrize(
     "mortality, safety, readmission, patient_experience, process, expected",
-    [
-        (3, 0, 3, 0, 0, False),  # Only 2 qualifying domains
-        (3, 0, 3, 3, 0, True),   # 3 domains, Mortality qualifies
-        (0, 3, 3, 3, 0, True),   # 3 domains, Safety qualifies
-        (0, 0, 3, 3, 3, False),  # 3 domains, neither Mortality nor Safety
-        (3, 0, 3, 3, 3, True),   # 4 qualifying domains
-        (3, 3, 3, 3, 3, True),   # All 5 domains qualify
-        (2, 0, 3, 3, 0, False),  # Mortality below measure threshold
-        (2, 3, 3, 3, 0, True),   # Mortality fails, but Safety and 2 other domains qualify
-        (3, 0, 2, 3, 0, False),  # Readmission below measure threshold
-        (3, 0, 3, 4, 0, True),   # Patient Experience exceeds minimum measure count
-        (3, 3, 0, 0, 0, False),  # Both qualify, but only 2 domains
-        (3, 3, 3, 0, 0, True),   # Both Mortality and Safety qualify; 3 domains total
-        (0, 0, 0, 0, 0, False),  # No domains qualify
-    ],
+[
+    (3, 0, 3, 0, 0, False),  # Mortality + Readmission qualify; only 2 domains
+    (3, 0, 3, 3, 0, True),   # Mortality + Readmission + Patient Experience qualify
+    (0, 3, 3, 3, 0, True),   # Safety + Readmission + Patient Experience qualify
+    (0, 0, 3, 3, 3, False),  # Readmission + Patient Experience + Process; no Mortality/Safety
+    (3, 0, 3, 3, 3, True),   # Mortality + Readmission + Patient Experience + Process qualify
+    (3, 3, 3, 3, 3, True),   # All 5 domains qualify
+    (2, 0, 3, 3, 0, False),  # Readmission + Patient Experience; Mortality < 3
+    (2, 3, 3, 3, 0, True),   # Safety + Readmission + Patient Experience; Mortality < 3
+    (3, 0, 2, 3, 0, False),  # Mortality + Patient Experience qualify;  Readmission < 3
+    (3, 0, 3, 4, 0, True),   # Mortality + Readmission + Patient Experience (4 measures) qualify
+    (3, 3, 0, 0, 0, False),  # Mortality + Safety qualify; only 2 domains
+    (3, 3, 3, 0, 0, True),   # Mortality + Safety + Readmission qualify
+    (0, 0, 0, 0, 0, False),  # No domains qualify
+]
+
 )
 def test_reporting_eligibility(
     mortality,
@@ -44,8 +45,8 @@ def test_reporting_eligibility(
 
     qualifying_count = sum(qualifying.values())
 
+     # TODO: Replace reference logic with the Program 2 implementation when available.
     actual = qualifying_count >= 3 and (
         qualifying["mortality"] or qualifying["safety"]
-    )  # come back and fix this
-
+    ) 
     assert actual == expected
