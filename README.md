@@ -126,6 +126,9 @@ supplied `data/` directory is mounted read-only inside the container.
 See [Development setup](docs/development-setup.md) for VS Code Dev Containers, optional local
 Python environments, and troubleshooting.
 
+To run a standalone generated Program 0 candidate in the isolated runner and collect its three
+CSV outputs, see [Program 0 candidate execution](docs/program-0-candidate-execution.md).
+
 ## Team workflow
 
 - Read [Contributing](CONTRIBUTING.md) before creating a branch or pull request.
