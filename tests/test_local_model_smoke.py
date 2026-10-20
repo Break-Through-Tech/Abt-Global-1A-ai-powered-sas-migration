@@ -104,14 +104,16 @@ def test_records_candidate_and_checks_synthetic_rows(
     ],
     ids=["wrong-arithmetic", "lost-missingness", "lost-leading-zeros", "missing-row"],
 )
+@pytest.mark.parametrize("with_helpers", [False, True])
 def test_successful_execution_does_not_hide_wrong_results(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     fake_ollama: dict[str, object],
     actual: str,
+    with_helpers: bool,
 ) -> None:
     stub_runner(monkeypatch, actual)
-    passed, path = local_model.run_local_model_smoke(tmp_path)
+    passed, path = local_model.run_local_model_smoke(tmp_path, with_sas_helpers=with_helpers)
     report = read_report(path)
     assert not passed
     assert report["generation_status"] == "succeeded"
@@ -252,7 +254,10 @@ def test_suite_preserves_a_failed_attempt_without_retrying(
     calls = []
     unloaded = []
 
-    def smoke(root: Path, *, model: str, image: str, case: str) -> tuple[bool, Path]:
+    def smoke(
+        root: Path, *, model: str, image: str, case: str, with_sas_helpers: bool
+    ) -> tuple[bool, Path]:
+        assert not with_sas_helpers
         calls.append((model, case))
         return case != "sum-missing", root / "reports" / f"{model}-{case}.json"
 
@@ -295,3 +300,64 @@ def test_cloud_alias_is_rejected_before_generation(
     assert not passed
     assert "downloaded local model" in str(read_report(path)["error"])
     assert endpoints == ["/api/tags", "/api/show"]
+
+
+@pytest.mark.parametrize("with_helpers", [False, True])
+def test_helper_condition_is_opt_in_and_records_exact_staged_bytes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    fake_ollama: dict[str, object],
+    with_helpers: bool,
+) -> None:
+    from sasguard.provenance.hashing import sha256_file
+
+    calls = stub_runner(monkeypatch, DEFAULT_CASE.expected_csv)
+    passed, path = local_model.run_local_model_smoke(tmp_path, with_sas_helpers=with_helpers)
+    assert passed
+    report = read_report(path)
+    request = read_report(path.parent / "request.json")
+    content = request["messages"][1]["content"]
+    helper = path.parent / "source" / "sas_helpers.py"
+    assert report["condition"] == (local_model.HELPER_VERSION if with_helpers else "direct")
+    assert helper.exists() is with_helpers
+    if with_helpers:
+        assert content == DEFAULT_CASE.prompt + local_model.HELPER_GUIDANCE
+        assert helper.read_bytes() == Path(local_model.compatibility.__file__).read_bytes()
+        assert report["hashes"]["source/sas_helpers.py"] == sha256_file(helper)
+        assert report["prompt_version"].endswith("+sas-helpers-v1")
+        assert calls[0]["source_directory"] == helper.parent
+    else:
+        assert content == DEFAULT_CASE.prompt
+        assert "source/sas_helpers.py" not in report["hashes"]
+
+
+def test_suite_forwards_helper_condition(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = []
+
+    def smoke(root: Path, **kwargs: object) -> tuple[bool, Path]:
+        calls.append(kwargs)
+        return True, root / "reports" / "test.json"
+
+    monkeypatch.setattr(local_model, "run_local_model_smoke", smoke)
+    monkeypatch.setattr(local_model, "_request_json", lambda *args: {})
+    passed, path = local_model.run_local_model_suite(
+        tmp_path, models=("test:4b",), with_sas_helpers=True
+    )
+    assert passed
+    assert len(calls) == len(CASES)
+    assert all(call["with_sas_helpers"] is True for call in calls)
+    assert read_report(path)["condition"] == "sas-helpers-v1"
+
+
+@pytest.mark.parametrize("command", ["local-model-smoke", "local-model-suite"])
+def test_cli_forwards_helper_flag(command: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = []
+
+    def run(*args: object, **kwargs: object) -> tuple[bool, Path]:
+        calls.append(kwargs)
+        return True, Path("report.json")
+
+    monkeypatch.setattr(cli, "run_local_model_smoke", run)
+    monkeypatch.setattr(cli, "run_local_model_suite", run)
+    assert CliRunner().invoke(cli.app, [command, "--with-sas-helpers"]).exit_code == 0
+    assert calls[0]["with_sas_helpers"] is True

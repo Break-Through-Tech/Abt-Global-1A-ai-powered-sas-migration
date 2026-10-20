@@ -11,6 +11,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
+from sasguard import compatibility
 from sasguard.data import load_artifact
 from sasguard.execution.environment import collect_python_environment
 from sasguard.execution.runner import DockerExecutionRunner
@@ -22,6 +23,22 @@ SYSTEM_PROMPT = (
     "Translate the supplied synthetic SAS into a complete Python entry point. "
     "Return exactly one JSON object with a code string. Do not include Markdown or explanations."
 )
+HELPER_VERSION = "sas-helpers-v1"
+HELPER_GUIDANCE = """
+Optional tested helpers are available in a read-only module next to your entry point.
+Import them with: from sas_helpers import read_sas_csv, sas_lt, sas_sum
+- read_sas_csv(path, key=None) returns a pandas DataFrame with uppercase column names.
+  PROVIDER_ID is protected as text by default. For another textual key, specify key.
+  The key preserves leading zeros and literal NA/NULL. Empty numeric fields are missing.
+- sas_lt(series, finite_scalar) returns booleans for SAS numeric '<'. Ordinary numeric
+  missing is below every finite number. Special SAS missing values are not supported.
+- sas_sum(dataframe) performs row-wise SAS SUM for two or more numeric columns. It
+  ignores missing arguments but returns missing if all arguments are missing.
+  Ordinary arithmetic '+' still propagates missing; it is not this SUM function.
+You may use these helpers or ordinary pandas as appropriate. Import every module you use.
+Use os.environ and pathlib.Path for the declared input and output directories.
+The helper module does not create outputs or perform validation for you.
+"""
 
 
 class GeneratedPython(BaseModel):
@@ -100,6 +117,7 @@ def run_local_model_smoke(
     model: str = "qwen3:4b",
     image: str = "sasguard-runner:local",
     case: str = "double-score",
+    with_sas_helpers: bool = False,
 ) -> tuple[bool, Path]:
     """Record one model attempt, run it in Docker, and check synthetic arithmetic.
 
@@ -109,6 +127,7 @@ def run_local_model_smoke(
     if case not in CASES:
         raise ValueError(f"unknown synthetic case {case!r}; choose from {', '.join(CASES)}")
     fixture = CASES[case]
+    prompt = fixture.prompt + (HELPER_GUIDANCE if with_sas_helpers else "")
     root = project_root.resolve()
     run = root / "reports" / "runs" / f"local-model-smoke-{uuid4()}"
     source, inputs, expected, output = (
@@ -117,7 +136,7 @@ def run_local_model_smoke(
     for directory in (source, inputs, expected, output):
         directory.mkdir(parents=True)
     (run / "source.sas").write_text(fixture.sas_source, encoding="utf-8")
-    (run / "prompt.txt").write_text(fixture.prompt, encoding="utf-8")
+    (run / "prompt.txt").write_text(prompt, encoding="utf-8")
     (inputs / "input.csv").write_text(fixture.input_csv, encoding="utf-8")
     (expected / "adjusted.csv").write_text(fixture.expected_csv, encoding="utf-8")
     policy = ArtifactComparisonPolicy(keys=(fixture.key,))
@@ -129,7 +148,7 @@ def run_local_model_smoke(
         "format": GeneratedPython.model_json_schema(),
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": fixture.prompt},
+            {"role": "user", "content": prompt},
         ],
         "options": {"temperature": 0, "seed": 42, "num_ctx": 4096, "num_predict": 1200},
     }
@@ -145,12 +164,18 @@ def run_local_model_smoke(
             expected / "adjusted.csv",
         )
     }
+    if with_sas_helpers:
+        helper_path = source / "sas_helpers.py"
+        helper_path.write_bytes(Path(compatibility.__file__).read_bytes())
+        hashes["source/sas_helpers.py"] = sha256_file(helper_path)
     report: dict[str, object] = {
         "schema_version": 1,
         "scope": "synthetic SAS smoke test; handwritten oracle; no SAS-runtime parity",
         "timestamp": datetime.now(UTC).isoformat(),
         "case": fixture.name,
-        "prompt_version": fixture.prompt_version,
+        "prompt_version": fixture.prompt_version
+        + (f"+{HELPER_VERSION}" if with_sas_helpers else ""),
+        "condition": HELPER_VERSION if with_sas_helpers else "direct",
         "model": model,
         "generation_status": "failed",
         "execution_result": None,
@@ -208,7 +233,11 @@ def run_local_model_smoke(
 
 
 def run_local_model_suite(
-    project_root: Path, *, models: tuple[str, ...], image: str = "sasguard-runner:local"
+    project_root: Path,
+    *,
+    models: tuple[str, ...],
+    image: str = "sasguard-runner:local",
+    with_sas_helpers: bool = False,
 ) -> tuple[bool, Path]:
     """Run each frozen synthetic case once per model and retain every attempt."""
     if not models or len(models) != len(set(models)):
@@ -223,6 +252,7 @@ def run_local_model_suite(
         "scope": "synthetic documentation-based checks; no SAS-runtime parity",
         "timestamp": datetime.now(UTC).isoformat(),
         "models": list(models),
+        "condition": HELPER_VERSION if with_sas_helpers else "direct",
         "cases": list(CASES),
         "attempts": attempts,
         "complete": False,
@@ -233,7 +263,9 @@ def run_local_model_suite(
     unload_errors: list[str] = []
     for model in models:
         for case in CASES:
-            passed, report = run_local_model_smoke(root, model=model, image=image, case=case)
+            passed, report = run_local_model_smoke(
+                root, model=model, image=image, case=case, with_sas_helpers=with_sas_helpers
+            )
             attempts.append(
                 {
                     "model": model,

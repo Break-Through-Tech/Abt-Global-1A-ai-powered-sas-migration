@@ -78,6 +78,56 @@ To run one case separately, add `--case`, for example:
 python -m sasguard.cli local-model-smoke --model qwen3:4b --case sum-missing
 ```
 
+## Optional helper condition
+
+Build a fresh runner before the helper comparison. Older runner images may lack the
+canonical CSV loader. This runner-specific build excludes host prototype modules, including
+the synthetic expected results. It also excludes the unstaged compatibility module, so only
+the helper condition receives it. Do not copy prototype modules into a candidate image.
+
+```text
+docker build -f Dockerfile.runner -t sasguard-runner:helpers-v1 .
+```
+
+Check the exact image before calling the model. In PowerShell:
+
+```powershell
+$env:SASGUARD_RUN_DOCKER_TESTS = "1"
+$env:SASGUARD_TEST_RUNNER_IMAGE = "sasguard-runner:helpers-v1"
+python -m pytest tests/integration/test_isolated_runner.py::test_staged_sas_helpers_run_in_existing_image -q
+```
+
+In macOS zsh:
+
+```zsh
+SASGUARD_RUN_DOCKER_TESTS=1 SASGUARD_TEST_RUNNER_IMAGE=sasguard-runner:helpers-v1 python -m pytest tests/integration/test_isolated_runner.py::test_staged_sas_helpers_run_in_existing_image -q
+```
+
+Run both conditions on that same image. Add `--with-sas-helpers` for the second condition:
+
+```text
+python -m sasguard.cli local-model-suite --image sasguard-runner:helpers-v1 --model qwen3:4b --model qwen3.5:9b-q4_K_M
+python -m sasguard.cli local-model-suite --image sasguard-runner:helpers-v1 --model qwen3:4b --model qwen3.5:9b-q4_K_M --with-sas-helpers
+```
+
+The controller appends helper API instructions to the original user prompt and copies
+`src/sasguard/compatibility.py` into the read-only candidate source as `sas_helpers.py`.
+The candidate may import `read_sas_csv`, `sas_lt`, and `sas_sum`. The first uses our existing
+canonical loader; the others implement ordinary numeric missing-value comparison and
+multi-argument SUM. They do not implement all SAS semantics. Only the selected textual key
+gets protection from CSV missing-value inference. Special missing values are unsupported.
+
+Each report records `condition`, a distinct prompt version, and the staged helper's SHA-256.
+The run still uses the same fixtures, generation settings, output contract, and host validator.
+The model receives neither fixture rows nor expected results. The helpers do not validate
+their own output. Without the flag, the original direct-mode request is unchanged and no
+helper file is staged.
+
+This changes both the available functions and the instructions. It cannot distinguish their
+individual effects. These four cases already informed the helpers, so they are development
+checks rather than held-out evidence of general translation quality. Use new cases and,
+when available, SAS-generated reference outputs before drawing broader conclusions.
+
 ## Read the result
 
 Every invocation saves a separate directory under `reports/runs/local-model-smoke-<UUID>/`.
@@ -102,6 +152,11 @@ The comparison requires exact numeric agreement and strict missingness, with row
 the case's textual key, `PROVIDER_ID` or `GROUP`. Row-level fixtures include leading zeros and
 literal `NA` and `NULL` identifiers. The default `double-score` prompt and options remain unchanged
 from the initial experiment.
+
+The policy does not enforce a full output dtype schema. In particular, its inferred exact
+comparison accepts Boolean flags as equal to numeric 0/1. A passing report must not be
+presented as proof of numeric flag types. A stricter schema check needs its own versioned
+evaluation; do not change a recorded experiment's policy after seeing its outcomes.
 
 Exit code 0 means these synthetic checks passed. Exit code 1 means the attempt failed and the
 report should be inspected. Exit code 2 means the controller could not start. Failed attempts

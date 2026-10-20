@@ -107,10 +107,15 @@ def local_model_smoke(
         str,
         typer.Option(help="double-score, missing-comparison, sum-missing, or grouped-mean."),
     ] = "double-score",
+    with_sas_helpers: Annotated[
+        bool, typer.Option(help="Offer tested SAS helpers in a separate experimental condition.")
+    ] = False,
 ) -> None:
     """Test one local model on synthetic SAS, with Docker execution and host validation."""
     try:
-        passed, report = run_local_model_smoke(project_root, model=model, image=image, case=case)
+        passed, report = run_local_model_smoke(
+            project_root, model=model, image=image, case=case, with_sas_helpers=with_sas_helpers
+        )
     except (OSError, ValueError) as error:
         typer.echo(f"Local model smoke test could not start: {error}", err=True)
         raise typer.Exit(code=2) from error
@@ -133,11 +138,17 @@ def local_model_suite(
     image: Annotated[str, typer.Option(help="Existing isolated Docker runner image.")] = (
         "sasguard-runner:local"
     ),
+    with_sas_helpers: Annotated[
+        bool, typer.Option(help="Offer tested SAS helpers in a separate experimental condition.")
+    ] = False,
 ) -> None:
     """Run all synthetic cases once per local model and save a comparison index."""
     try:
         passed, report = run_local_model_suite(
-            project_root, models=tuple(models or ["qwen3:4b"]), image=image
+            project_root,
+            models=tuple(models or ["qwen3:4b"]),
+            image=image,
+            with_sas_helpers=with_sas_helpers,
         )
     except (OSError, ValueError) as error:
         typer.echo(f"Local model suite could not start: {error}", err=True)
