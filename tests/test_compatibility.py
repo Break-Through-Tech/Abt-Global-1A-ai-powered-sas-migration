@@ -8,10 +8,11 @@ import pytest
 from sasguard.compatibility import read_sas_csv, sas_lt, sas_sum
 
 
-def test_read_preserves_text_keys_and_numeric_missing(tmp_path: Path) -> None:
+@pytest.mark.parametrize("string_path", [False, True])
+def test_read_preserves_text_keys_and_numeric_missing(tmp_path: Path, string_path: bool) -> None:
     path = tmp_path / "scores.csv"
     path.write_text("provider_id,value\n00190,8\nNA,\nNULL,-7\n,3\n", encoding="utf-8")
-    frame = read_sas_csv(path)
+    frame = read_sas_csv(str(path) if string_path else path)
     assert list(frame.columns) == ["PROVIDER_ID", "VALUE"]
     assert frame["PROVIDER_ID"].iloc[:3].tolist() == ["00190", "NA", "NULL"]
     assert pd.isna(frame["PROVIDER_ID"].iloc[3])

@@ -110,6 +110,13 @@ python -m sasguard.cli local-model-suite --image sasguard-runner:helpers-v1 --mo
 python -m sasguard.cli local-model-suite --image sasguard-runner:helpers-v1 --model qwen3:4b --model qwen3.5:9b-q4_K_M --with-sas-helpers
 ```
 
+See [the October 19 helper comparison](local-model-helper-comparison.md) for measured
+results, retained failures, and the Boolean/numeric flag comparison limitation.
+
+The current condition is `sas-helpers-v2`. Its CSV reader accepts both `Path` objects and
+strings. The earlier `sas-helpers-v1` accepted only `Path` objects; its recorded results remain
+separate. Changing helper code requires a new condition version and a new run directory.
+
 The controller appends helper API instructions to the original user prompt and copies
 `src/sasguard/compatibility.py` into the read-only candidate source as `sas_helpers.py`.
 The candidate may import `read_sas_csv`, `sas_lt`, and `sas_sum`. The first uses our existing

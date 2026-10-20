@@ -23,7 +23,7 @@ SYSTEM_PROMPT = (
     "Translate the supplied synthetic SAS into a complete Python entry point. "
     "Return exactly one JSON object with a code string. Do not include Markdown or explanations."
 )
-HELPER_VERSION = "sas-helpers-v1"
+HELPER_VERSION = "sas-helpers-v2"
 HELPER_GUIDANCE = """
 Optional tested helpers are available in a read-only module next to your entry point.
 Import them with: from sas_helpers import read_sas_csv, sas_lt, sas_sum

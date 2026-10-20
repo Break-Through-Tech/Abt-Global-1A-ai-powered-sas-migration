@@ -324,7 +324,7 @@ def test_helper_condition_is_opt_in_and_records_exact_staged_bytes(
         assert content == DEFAULT_CASE.prompt + local_model.HELPER_GUIDANCE
         assert helper.read_bytes() == Path(local_model.compatibility.__file__).read_bytes()
         assert report["hashes"]["source/sas_helpers.py"] == sha256_file(helper)
-        assert report["prompt_version"].endswith("+sas-helpers-v1")
+        assert report["prompt_version"].endswith(f"+{local_model.HELPER_VERSION}")
         assert calls[0]["source_directory"] == helper.parent
     else:
         assert content == DEFAULT_CASE.prompt
@@ -346,7 +346,7 @@ def test_suite_forwards_helper_condition(tmp_path: Path, monkeypatch: pytest.Mon
     assert passed
     assert len(calls) == len(CASES)
     assert all(call["with_sas_helpers"] is True for call in calls)
-    assert read_report(path)["condition"] == "sas-helpers-v1"
+    assert read_report(path)["condition"] == local_model.HELPER_VERSION
 
 
 @pytest.mark.parametrize("command", ["local-model-smoke", "local-model-suite"])

@@ -15,15 +15,16 @@ from pandas.api.types import is_bool_dtype, is_numeric_dtype
 from sasguard.data import load_artifact
 
 
-def read_sas_csv(path: Path, *, key: str | None = None) -> pd.DataFrame:
+def read_sas_csv(path: Path | str, *, key: str | None = None) -> pd.DataFrame:
     """Read CSV with uppercase columns and a textual key protected from NA inference.
 
     PROVIDER_ID is the default key when present. Other character columns do not
     receive this protection. Empty numeric fields remain missing values.
     """
-    if path.suffix.casefold() != ".csv":
+    source_path = Path(path)
+    if source_path.suffix.casefold() != ".csv":
         raise ValueError("read_sas_csv requires a CSV file")
-    return load_artifact(path, key=key).frame.copy()
+    return load_artifact(source_path, key=key).frame.copy()
 
 
 def _require_numeric(frame: pd.DataFrame) -> None:

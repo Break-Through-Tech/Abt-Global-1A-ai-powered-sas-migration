@@ -59,6 +59,8 @@ from sas_helpers import read_sas_csv, sas_lt, sas_sum
 assert importlib.util.find_spec('sasguard.prototypes') is None
 assert importlib.util.find_spec('sasguard.compatibility') is None
 frame = read_sas_csv(Path(os.environ['SASGUARD_INPUT_DIR']) / 'input.csv')
+string_frame = read_sas_csv(str(Path(os.environ['SASGUARD_INPUT_DIR']) / 'input.csv'))
+assert string_frame.equals(frame)
 frame['FLAG'] = sas_lt(frame['X'], 0).astype(int)
 frame['TOTAL'] = sas_sum(frame[['X', 'Y']])
 frame.to_csv(Path(os.environ['SASGUARD_OUTPUT_DIR']) / 'adjusted.csv', index=False)
