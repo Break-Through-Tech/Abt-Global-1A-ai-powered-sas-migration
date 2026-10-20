@@ -15,9 +15,13 @@ from sasguard import compatibility
 from sasguard.data import load_artifact
 from sasguard.execution.environment import collect_python_environment
 from sasguard.execution.runner import DockerExecutionRunner
-from sasguard.prototypes.local_model_cases import CASES
+from sasguard.prototypes.local_model_validation import (
+    VALIDATION_POLICY_VERSION,
+    numeric_policy,
+    select_cases,
+)
 from sasguard.provenance.hashing import sha256_file, validate_sha256
-from sasguard.verification import ArtifactComparisonPolicy, compare_artifacts
+from sasguard.verification import compare_artifacts
 
 SYSTEM_PROMPT = (
     "Translate the supplied synthetic SAS into a complete Python entry point. "
@@ -118,15 +122,17 @@ def run_local_model_smoke(
     image: str = "sasguard-runner:local",
     case: str = "double-score",
     with_sas_helpers: bool = False,
+    case_set: str = "development",
 ) -> tuple[bool, Path]:
     """Record one model attempt, run it in Docker, and check synthetic arithmetic.
 
     The model receives no supplied project material, actual input rows, or oracle values.
     Failed attempts remain in their own run directories. This is not the Program 0 baseline.
     """
-    if case not in CASES:
-        raise ValueError(f"unknown synthetic case {case!r}; choose from {', '.join(CASES)}")
-    fixture = CASES[case]
+    cases = select_cases(case_set)
+    if case not in cases:
+        raise ValueError(f"unknown synthetic case {case!r}; choose from {', '.join(cases)}")
+    fixture = cases[case]
     prompt = fixture.prompt + (HELPER_GUIDANCE if with_sas_helpers else "")
     root = project_root.resolve()
     run = root / "reports" / "runs" / f"local-model-smoke-{uuid4()}"
@@ -139,7 +145,7 @@ def run_local_model_smoke(
     (run / "prompt.txt").write_text(prompt, encoding="utf-8")
     (inputs / "input.csv").write_text(fixture.input_csv, encoding="utf-8")
     (expected / "adjusted.csv").write_text(fixture.expected_csv, encoding="utf-8")
-    policy = ArtifactComparisonPolicy(keys=(fixture.key,))
+    policy = numeric_policy(fixture)
     (run / "policy.json").write_text(policy.to_json(), encoding="utf-8")
     request: dict[str, JsonValue] = {
         "model": model,
@@ -173,6 +179,11 @@ def run_local_model_smoke(
         "scope": "synthetic SAS smoke test; handwritten oracle; no SAS-runtime parity",
         "timestamp": datetime.now(UTC).isoformat(),
         "case": fixture.name,
+        "case_set": case_set,
+        "validation_policy_version": VALIDATION_POLICY_VERSION,
+        "validation_contract_sha256": sha256_file(
+            Path(__file__).with_name("local_model_validation.py")
+        ),
         "prompt_version": fixture.prompt_version
         + (f"+{HELPER_VERSION}" if with_sas_helpers else ""),
         "condition": HELPER_VERSION if with_sas_helpers else "direct",
@@ -184,7 +195,11 @@ def run_local_model_smoke(
         "human_review": "not_recorded",
         "hashes": hashes,
         "controller_sha256": sha256_file(Path(__file__)),
-        "fixtures_sha256": sha256_file(Path(__file__).with_name("local_model_cases.py")),
+        "fixtures_sha256": sha256_file(
+            Path(__file__).with_name(
+                "local_model_cases.py" if case_set == "development" else "local_model_holdout.py"
+            )
+        ),
         "controller_environment": collect_python_environment().model_dump(mode="json"),
         "passed": False,
         "error": None,
@@ -238,10 +253,12 @@ def run_local_model_suite(
     models: tuple[str, ...],
     image: str = "sasguard-runner:local",
     with_sas_helpers: bool = False,
+    case_set: str = "development",
 ) -> tuple[bool, Path]:
     """Run each frozen synthetic case once per model and retain every attempt."""
     if not models or len(models) != len(set(models)):
         raise ValueError("choose at least one model, with no duplicate model tags")
+    cases = select_cases(case_set)
     root = project_root.resolve()
     directory = root / "reports" / "runs" / f"local-model-suite-{uuid4()}"
     directory.mkdir(parents=True)
@@ -253,7 +270,9 @@ def run_local_model_suite(
         "timestamp": datetime.now(UTC).isoformat(),
         "models": list(models),
         "condition": HELPER_VERSION if with_sas_helpers else "direct",
-        "cases": list(CASES),
+        "cases": list(cases),
+        "case_set": case_set,
+        "validation_policy_version": VALIDATION_POLICY_VERSION,
         "attempts": attempts,
         "complete": False,
         "passed": False,
@@ -262,9 +281,14 @@ def run_local_model_suite(
     _write_json(path, suite)
     unload_errors: list[str] = []
     for model in models:
-        for case in CASES:
+        for case in cases:
             passed, report = run_local_model_smoke(
-                root, model=model, image=image, case=case, with_sas_helpers=with_sas_helpers
+                root,
+                model=model,
+                image=image,
+                case=case,
+                with_sas_helpers=with_sas_helpers,
+                case_set=case_set,
             )
             attempts.append(
                 {

@@ -135,6 +135,43 @@ individual effects. These four cases already informed the helpers, so they are d
 checks rather than held-out evidence of general translation quality. Use new cases and,
 when available, SAS-generated reference outputs before drawing broader conclusions.
 
+## Numeric policy and separate case set, October 20
+
+New runs record `validation_policy_version: synthetic-numeric-v2`. Every declared non-key
+column has an explicit numeric comparison rule. Boolean flags and nonnumeric text fail,
+even when Python would consider `True` equal to `1`. Numeric tolerances remain zero and
+missingness stays strict. The policy JSON format remains schema version 1; the named
+evaluation contract has changed, not that serialization format.
+
+Recheck a saved complete suite without calling a model or executing its candidate code:
+
+```text
+python -m sasguard.cli reassess-local-model-suite reports/runs/local-model-suite-<UUID>/report.json
+```
+
+The reassessment checks the saved file hashes and writes a new linked report and new policy
+files. It never overwrites the old suite or turns an execution failure into a pass based on
+partial output. Exit code 1 means at least one candidate failed, not that the command broke.
+See [the numeric reassessment](local-model-numeric-reassessment.md) for the measured results.
+
+Four additional cases are available through `--case-set holdout-v1`. They cover a nonzero
+comparison boundary, three-argument SUM, grouped counts with textual keys, and an affine
+calculation. Their expected values are handwritten and cross-checked with independent scalar
+Python tests. They have not been run in SAS or evaluated by a model. They are prospective
+checks designed after development, not an independent blind benchmark.
+
+After review and a protocol freeze, these commands run the separate set on the same image:
+
+```text
+python -m sasguard.cli local-model-suite --case-set holdout-v1 --image sasguard-runner:helpers-v1 --model qwen3:4b --model qwen3.5:9b-q4_K_M
+python -m sasguard.cli local-model-suite --case-set holdout-v1 --image sasguard-runner:helpers-v1 --model qwen3:4b --model qwen3.5:9b-q4_K_M --with-sas-helpers
+```
+
+For one case, use `local-model-smoke --case-set holdout-v1 --case holdout-threshold`.
+The default set is still `development`; its original SAS, prompts, inputs, and expected CSVs
+are unchanged. Do not mix scores from these two sets or tune helpers on the new cases before
+recording their first model evaluation.
+
 ## Read the result
 
 Every invocation saves a separate directory under `reports/runs/local-model-smoke-<UUID>/`.
@@ -160,10 +197,10 @@ the case's textual key, `PROVIDER_ID` or `GROUP`. Row-level fixtures include lea
 literal `NA` and `NULL` identifiers. The default `double-score` prompt and options remain unchanged
 from the initial experiment.
 
-The policy does not enforce a full output dtype schema. In particular, its inferred exact
-comparison accepts Boolean flags as equal to numeric 0/1. A passing report must not be
-presented as proof of numeric flag types. A stricter schema check needs its own versioned
-evaluation; do not change a recorded experiment's policy after seeing its outcomes.
+Historical runs used an inferred comparison policy that accepted Boolean flags as equal to
+numeric 0/1. Those reports remain unchanged. New runs use the explicit numeric rules above,
+and historical outputs can be reassessed separately. Do not present a historical inferred
+policy pass as proof of numeric flag types.
 
 Exit code 0 means these synthetic checks passed. Exit code 1 means the attempt failed and the
 report should be inspected. Exit code 2 means the controller could not start. Failed attempts

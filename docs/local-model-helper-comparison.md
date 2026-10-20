@@ -4,6 +4,10 @@ This experiment compares direct translation with tested helper functions on the 
 synthetic cases. The expected results are handwritten from SAS documentation, not generated
 by a SAS runtime. These checks do not establish Program 0 or full-pipeline correctness.
 
+The table below preserves the original policy results. The
+[October 20 numeric reassessment](local-model-numeric-reassessment.md) rejects Boolean flags,
+giving helper v2 scores of 1/4 for 4B and 3/4 for 9B without changing these original records.
+
 ## Results under the unchanged comparison policy
 
 | Model | Direct control | Helper v1 | Helper v2 |
