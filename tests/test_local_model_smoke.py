@@ -11,6 +11,8 @@ from sasguard import cli
 from sasguard.execution.result import ExecutionResult, ExecutionStatus
 from sasguard.prototypes import local_model
 from sasguard.prototypes.local_model_cases import CASES
+from sasguard.prototypes.local_model_holdout import HOLDOUT_CASES
+from sasguard.prototypes.local_model_validation import select_cases
 
 CODE = "# Candidate must be saved exactly.\nprint('synthetic attempt')\n"
 DEFAULT_CASE = CASES["double-score"]
@@ -40,7 +42,7 @@ def fake_ollama(monkeypatch: pytest.MonkeyPatch) -> dict[str, object]:
         assert payload["think"] is False
         # Neither the CSV rows nor the hand-written oracle enter the request.
         contents = "\n".join(message["content"] for message in payload["messages"])
-        for fixture in CASES.values():
+        for fixture in (CASES | HOLDOUT_CASES).values():
             assert fixture.input_csv not in contents
             assert fixture.expected_csv not in contents
         return response
@@ -104,14 +106,16 @@ def test_records_candidate_and_checks_synthetic_rows(
     ],
     ids=["wrong-arithmetic", "lost-missingness", "lost-leading-zeros", "missing-row"],
 )
+@pytest.mark.parametrize("with_helpers", [False, True])
 def test_successful_execution_does_not_hide_wrong_results(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     fake_ollama: dict[str, object],
     actual: str,
+    with_helpers: bool,
 ) -> None:
     stub_runner(monkeypatch, actual)
-    passed, path = local_model.run_local_model_smoke(tmp_path)
+    passed, path = local_model.run_local_model_smoke(tmp_path, with_sas_helpers=with_helpers)
     report = read_report(path)
     assert not passed
     assert report["generation_status"] == "succeeded"
@@ -201,19 +205,27 @@ def test_cli_reports_the_attempt_outcome(
     assert str(report) in result.stdout
 
 
-@pytest.mark.parametrize("case", list(CASES))
+@pytest.mark.parametrize(
+    "case_set,case",
+    [
+        *(("development", name) for name in CASES),
+        *(("holdout-v1", name) for name in HOLDOUT_CASES),
+    ],
+)
 def test_cases_use_their_own_source_contract_and_comparison_key(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     fake_ollama: dict[str, object],
     case: str,
+    case_set: str,
 ) -> None:
-    fixture = CASES[case]
+    fixture = select_cases(case_set)[case]
     stub_runner(monkeypatch, fixture.expected_csv)
-    passed, path = local_model.run_local_model_smoke(tmp_path, case=case)
+    passed, path = local_model.run_local_model_smoke(tmp_path, case=case, case_set=case_set)
     assert passed
     report = read_report(path)
     assert report["case"] == case
+    assert report["case_set"] == case_set
     assert report["prompt_version"] == fixture.prompt_version
     request = json.loads((path.parent / "request.json").read_text())
     assert fixture.sas_source in request["messages"][1]["content"]
@@ -252,7 +264,11 @@ def test_suite_preserves_a_failed_attempt_without_retrying(
     calls = []
     unloaded = []
 
-    def smoke(root: Path, *, model: str, image: str, case: str) -> tuple[bool, Path]:
+    def smoke(
+        root: Path, *, model: str, image: str, case: str, with_sas_helpers: bool, case_set: str
+    ) -> tuple[bool, Path]:
+        assert not with_sas_helpers
+        assert case_set == "development"
         calls.append((model, case))
         return case != "sum-missing", root / "reports" / f"{model}-{case}.json"
 
@@ -295,3 +311,112 @@ def test_cloud_alias_is_rejected_before_generation(
     assert not passed
     assert "downloaded local model" in str(read_report(path)["error"])
     assert endpoints == ["/api/tags", "/api/show"]
+
+
+@pytest.mark.parametrize("with_helpers", [False, True])
+def test_helper_condition_is_opt_in_and_records_exact_staged_bytes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    fake_ollama: dict[str, object],
+    with_helpers: bool,
+) -> None:
+    from sasguard.provenance.hashing import sha256_file
+
+    calls = stub_runner(monkeypatch, DEFAULT_CASE.expected_csv)
+    passed, path = local_model.run_local_model_smoke(tmp_path, with_sas_helpers=with_helpers)
+    assert passed
+    report = read_report(path)
+    request = read_report(path.parent / "request.json")
+    content = request["messages"][1]["content"]
+    helper = path.parent / "source" / "sas_helpers.py"
+    assert report["condition"] == (local_model.HELPER_VERSION if with_helpers else "direct")
+    assert helper.exists() is with_helpers
+    if with_helpers:
+        assert content == DEFAULT_CASE.prompt + local_model.HELPER_GUIDANCE
+        assert helper.read_bytes() == Path(local_model.compatibility.__file__).read_bytes()
+        assert report["hashes"]["source/sas_helpers.py"] == sha256_file(helper)
+        assert report["prompt_version"].endswith(f"+{local_model.HELPER_VERSION}")
+        assert calls[0]["source_directory"] == helper.parent
+    else:
+        assert content == DEFAULT_CASE.prompt
+        assert "source/sas_helpers.py" not in report["hashes"]
+
+
+def test_suite_forwards_helper_condition(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = []
+
+    def smoke(root: Path, **kwargs: object) -> tuple[bool, Path]:
+        calls.append(kwargs)
+        return True, root / "reports" / "test.json"
+
+    monkeypatch.setattr(local_model, "run_local_model_smoke", smoke)
+    monkeypatch.setattr(local_model, "_request_json", lambda *args: {})
+    passed, path = local_model.run_local_model_suite(
+        tmp_path, models=("test:4b",), with_sas_helpers=True
+    )
+    assert passed
+    assert len(calls) == len(CASES)
+    assert all(call["with_sas_helpers"] is True for call in calls)
+    assert read_report(path)["condition"] == local_model.HELPER_VERSION
+
+
+@pytest.mark.parametrize("command", ["local-model-smoke", "local-model-suite"])
+def test_cli_forwards_helper_flag(command: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = []
+
+    def run(*args: object, **kwargs: object) -> tuple[bool, Path]:
+        calls.append(kwargs)
+        return True, Path("report.json")
+
+    monkeypatch.setattr(cli, "run_local_model_smoke", run)
+    monkeypatch.setattr(cli, "run_local_model_suite", run)
+    assert CliRunner().invoke(cli.app, [command, "--with-sas-helpers"]).exit_code == 0
+    assert calls[0]["with_sas_helpers"] is True
+
+
+def test_suite_selects_only_holdout_cases(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = []
+
+    def smoke(root: Path, **kwargs: object) -> tuple[bool, Path]:
+        calls.append(kwargs)
+        return True, root / "reports" / "mock.json"
+
+    monkeypatch.setattr(local_model, "run_local_model_smoke", smoke)
+    monkeypatch.setattr(local_model, "_request_json", lambda *args: {})
+    passed, path = local_model.run_local_model_suite(
+        tmp_path, models=("test:4b",), case_set="holdout-v1"
+    )
+    assert passed
+    assert {call["case"] for call in calls} == set(HOLDOUT_CASES)
+    assert all(call["case_set"] == "holdout-v1" for call in calls)
+    assert read_report(path)["case_set"] == "holdout-v1"
+
+
+@pytest.mark.parametrize("with_helpers", [False, True])
+def test_numeric_policy_rejects_boolean_flags(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    fake_ollama: dict[str, object],
+    with_helpers: bool,
+) -> None:
+    from io import StringIO
+
+    import pandas as pd
+
+    from sasguard.prototypes.local_model_validation import VALIDATION_POLICY_VERSION
+
+    frame = pd.read_csv(
+        StringIO(CASES["missing-comparison"].expected_csv),
+        keep_default_na=False,
+        dtype={"PROVIDER_ID": str},
+    )
+    frame["FLAG"] = frame["FLAG"].astype(bool)
+    stub_runner(monkeypatch, frame.to_csv(index=False))
+    passed, path = local_model.run_local_model_smoke(
+        tmp_path, case="missing-comparison", with_sas_helpers=with_helpers
+    )
+    report = read_report(path)
+    assert not passed
+    assert report["validation_status"] == "failed"
+    assert "numeric comparison requires numeric values" in report["error"]
+    assert report["validation_policy_version"] == VALIDATION_POLICY_VERSION

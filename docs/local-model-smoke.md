@@ -78,6 +78,100 @@ To run one case separately, add `--case`, for example:
 python -m sasguard.cli local-model-smoke --model qwen3:4b --case sum-missing
 ```
 
+## Optional helper condition
+
+Build a fresh runner before the helper comparison. Older runner images may lack the
+canonical CSV loader. This runner-specific build excludes host prototype modules, including
+the synthetic expected results. It also excludes the unstaged compatibility module, so only
+the helper condition receives it. Do not copy prototype modules into a candidate image.
+
+```text
+docker build -f Dockerfile.runner -t sasguard-runner:helpers-v1 .
+```
+
+Check the exact image before calling the model. In PowerShell:
+
+```powershell
+$env:SASGUARD_RUN_DOCKER_TESTS = "1"
+$env:SASGUARD_TEST_RUNNER_IMAGE = "sasguard-runner:helpers-v1"
+python -m pytest tests/integration/test_isolated_runner.py::test_staged_sas_helpers_run_in_existing_image -q
+```
+
+In macOS zsh:
+
+```zsh
+SASGUARD_RUN_DOCKER_TESTS=1 SASGUARD_TEST_RUNNER_IMAGE=sasguard-runner:helpers-v1 python -m pytest tests/integration/test_isolated_runner.py::test_staged_sas_helpers_run_in_existing_image -q
+```
+
+Run both conditions on that same image. Add `--with-sas-helpers` for the second condition:
+
+```text
+python -m sasguard.cli local-model-suite --image sasguard-runner:helpers-v1 --model qwen3:4b --model qwen3.5:9b-q4_K_M
+python -m sasguard.cli local-model-suite --image sasguard-runner:helpers-v1 --model qwen3:4b --model qwen3.5:9b-q4_K_M --with-sas-helpers
+```
+
+See [the October 19 helper comparison](local-model-helper-comparison.md) for measured
+results, retained failures, and the Boolean/numeric flag comparison limitation.
+
+The current condition is `sas-helpers-v2`. Its CSV reader accepts both `Path` objects and
+strings. The earlier `sas-helpers-v1` accepted only `Path` objects; its recorded results remain
+separate. Changing helper code requires a new condition version and a new run directory.
+
+The controller appends helper API instructions to the original user prompt and copies
+`src/sasguard/compatibility.py` into the read-only candidate source as `sas_helpers.py`.
+The candidate may import `read_sas_csv`, `sas_lt`, and `sas_sum`. The first uses our existing
+canonical loader; the others implement ordinary numeric missing-value comparison and
+multi-argument SUM. They do not implement all SAS semantics. Only the selected textual key
+gets protection from CSV missing-value inference. Special missing values are unsupported.
+
+Each report records `condition`, a distinct prompt version, and the staged helper's SHA-256.
+The run still uses the same fixtures, generation settings, output contract, and host validator.
+The model receives neither fixture rows nor expected results. The helpers do not validate
+their own output. Without the flag, the original direct-mode request is unchanged and no
+helper file is staged.
+
+This changes both the available functions and the instructions. It cannot distinguish their
+individual effects. These four cases already informed the helpers, so they are development
+checks rather than held-out evidence of general translation quality. Use new cases and,
+when available, SAS-generated reference outputs before drawing broader conclusions.
+
+## Numeric policy and separate case set, October 20
+
+New runs record `validation_policy_version: synthetic-numeric-v2`. Every declared non-key
+column has an explicit numeric comparison rule. Boolean flags and nonnumeric text fail,
+even when Python would consider `True` equal to `1`. Numeric tolerances remain zero and
+missingness stays strict. The policy JSON format remains schema version 1; the named
+evaluation contract has changed, not that serialization format.
+
+Recheck a saved complete suite without calling a model or executing its candidate code:
+
+```text
+python -m sasguard.cli reassess-local-model-suite reports/runs/local-model-suite-<UUID>/report.json
+```
+
+The reassessment checks the saved file hashes and writes a new linked report and new policy
+files. It never overwrites the old suite or turns an execution failure into a pass based on
+partial output. Exit code 1 means at least one candidate failed, not that the command broke.
+See [the numeric reassessment](local-model-numeric-reassessment.md) for the measured results.
+
+Four additional cases are available through `--case-set holdout-v1`. They cover a nonzero
+comparison boundary, three-argument SUM, grouped counts with textual keys, and an affine
+calculation. Their expected values are handwritten and cross-checked with independent scalar
+Python tests. They have not been run in SAS or evaluated by a model. They are prospective
+checks designed after development, not an independent blind benchmark.
+
+After review and a protocol freeze, these commands run the separate set on the same image:
+
+```text
+python -m sasguard.cli local-model-suite --case-set holdout-v1 --image sasguard-runner:helpers-v1 --model qwen3:4b --model qwen3.5:9b-q4_K_M
+python -m sasguard.cli local-model-suite --case-set holdout-v1 --image sasguard-runner:helpers-v1 --model qwen3:4b --model qwen3.5:9b-q4_K_M --with-sas-helpers
+```
+
+For one case, use `local-model-smoke --case-set holdout-v1 --case holdout-threshold`.
+The default set is still `development`; its original SAS, prompts, inputs, and expected CSVs
+are unchanged. Do not mix scores from these two sets or tune helpers on the new cases before
+recording their first model evaluation.
+
 ## Read the result
 
 Every invocation saves a separate directory under `reports/runs/local-model-smoke-<UUID>/`.
@@ -102,6 +196,11 @@ The comparison requires exact numeric agreement and strict missingness, with row
 the case's textual key, `PROVIDER_ID` or `GROUP`. Row-level fixtures include leading zeros and
 literal `NA` and `NULL` identifiers. The default `double-score` prompt and options remain unchanged
 from the initial experiment.
+
+Historical runs used an inferred comparison policy that accepted Boolean flags as equal to
+numeric 0/1. Those reports remain unchanged. New runs use the explicit numeric rules above,
+and historical outputs can be reassessed separately. Do not present a historical inferred
+policy pass as proof of numeric flag types.
 
 Exit code 0 means these synthetic checks passed. Exit code 1 means the attempt failed and the
 report should be inspected. Exit code 2 means the controller could not start. Failed attempts

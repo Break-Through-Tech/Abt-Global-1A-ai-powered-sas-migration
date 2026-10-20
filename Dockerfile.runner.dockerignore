@@ -1,0 +1,19 @@
+# The runner needs execution code, not host-only experiments or their expected results.
+.git
+.github
+.venv
+__pycache__
+*.py[cod]
+*.egg-info
+.pytest_cache
+.ruff_cache
+.mypy_cache
+.coverage
+.ipynb_checkpoints
+data
+reports/runs
+reports/runner-output
+reports/runner-results
+reports/runner-images
+src/sasguard/prototypes
+src/sasguard/compatibility.py
