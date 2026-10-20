@@ -24,6 +24,15 @@ from sasguard.verification.policy import ArtifactComparisonPolicy
 MORTALITY_SCOPE = "Program 1 Mortality only, supplied Program 0 intermediate"
 
 
+def report_runs_directory(project_root: Path) -> Path:
+    """Resolve the run store without allowing links to redirect it outside the project."""
+    root = project_root.resolve()
+    directory = (root / "reports" / "runs").resolve()
+    if directory == root or not directory.is_relative_to(root):
+        raise ValueError("reports/runs must remain inside the project directory")
+    return directory
+
+
 def safe_file(root: Path, relative: str) -> Path:
     path = root / normalize_relative_path(relative)
     if path.is_symlink() or not path.resolve().is_relative_to(root.resolve()):
@@ -350,9 +359,10 @@ def _synthetic(run: Path) -> RunReport:
 
 def read_run_report(project_root: Path, run_directory: Path) -> RunReport:
     root = project_root.resolve()
+    runs = report_runs_directory(root)
     run = run_directory if run_directory.is_absolute() else root / run_directory
     run = run.resolve()
-    if run.parent != (root / "reports" / "runs").resolve():
+    if run.parent != runs:
         raise ValueError("report input must be a top-level saved run inside reports/runs")
     if (run / "manifest.json").is_file():
         return _mortality(root, run)

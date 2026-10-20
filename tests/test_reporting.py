@@ -1,7 +1,9 @@
 """Recorded evidence is summarized without executing code or leaking logs and row keys."""
 
 import json
+import os
 import shutil
+import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
@@ -253,9 +255,43 @@ def test_mortality_scoped_status_and_privacy(
     assert str(tmp_path) not in content
     assert "Full-pipeline status: NOT VERIFIED" in render_handoff(report)
     if not passed:
+        assert "matched the Mortality output" not in render_handoff(report)
         assert report.artifacts[0].missing_key_count == 1
         assert report.first_observed_failures == ("OUTCOME_MORTALITY",)
     assert all(path.read_bytes() == data for path, data in snapshot.items())
+
+
+@pytest.mark.parametrize("rows", [2, 4566])
+def test_handoff_summarizes_recorded_mortality_counts(tmp_path: Path, rows: int) -> None:
+    report = read_run_report(tmp_path, mortality_bundle(tmp_path))
+    artifact = report.artifacts[0].model_copy(update={"actual_rows": rows, "expected_rows": rows})
+    text = render_handoff(report.model_copy(update={"artifacts": (artifact,)}))
+    assert (
+        "The saved comparison matched the Mortality output to the supplied SAS reference "
+        f"across {rows:,} provider rows and {len(artifact.actual_columns):,} columns, "
+        "within the configured tolerances."
+    ) in text
+    assert "Full-pipeline status: NOT VERIFIED" in text
+    assert "Human review of this run: not recorded." in text
+    assert "This is not a CMS ratings report." in text
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"actual_rows": None},
+        {"expected_rows": None},
+        {"actual_rows": 3},
+        {"actual_columns": ()},
+        {"expected_columns": ()},
+    ],
+)
+def test_handoff_does_not_invent_match_counts(tmp_path: Path, change: dict[str, object]) -> None:
+    report = read_run_report(tmp_path, mortality_bundle(tmp_path))
+    artifact = report.artifacts[0].model_copy(update=change)
+    text = render_handoff(report.model_copy(update={"artifacts": (artifact,)}))
+    assert "The saved Mortality comparison passed" in text
+    assert "provider rows and" not in text
 
 
 @pytest.mark.parametrize(
@@ -287,6 +323,8 @@ def test_changed_run_evidence_cannot_remain_verified(tmp_path: Path, relative: s
     report = read_run_report(tmp_path, run)
     assert report.scope_status is ScopeStatus.NOT_VERIFIED
     assert report.evidence_issues
+    assert "matched the Mortality output" not in render_handoff(report)
+    assert "The saved Mortality comparison passed" not in render_handoff(report)
 
 
 @pytest.mark.parametrize(
@@ -308,6 +346,7 @@ def test_synthetic_never_claims_sas_parity_or_copies_raw_fields(
     assert report.scope_status is status
     assert report.artifacts[0].reference_authority == "handwritten_synthetic"
     assert report.human_review == "not_recorded"
+    assert "matched the Mortality output" not in render_handoff(report)
     destination = write_run_report(tmp_path, run)
     assert SECRET not in "\n".join(path.read_text() for path in destination.iterdir())
 
@@ -427,6 +466,51 @@ def test_escape_and_unknown_layout_are_rejected(tmp_path: Path) -> None:
     empty.mkdir(parents=True)
     with pytest.raises(ValueError, match="unsupported run layout"):
         read_run_report(tmp_path, empty)
+
+
+@pytest.mark.parametrize(
+    "link_location,target_location",
+    [
+        ("reports", "outside/reports"),
+        ("reports/runs", "outside/reports/runs"),
+        ("reports/runs", "project"),
+    ],
+)
+def test_redirected_run_store_is_rejected_for_reading_and_writing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    link_location: str,
+    target_location: str,
+) -> None:
+    outside = tmp_path / "outside"
+    run = synthetic_bundle(outside)
+    report = read_run_report(outside, run)
+    root = tmp_path / "project"
+    root.mkdir()
+    link = root / link_location
+    target = tmp_path / target_location
+    link.parent.mkdir(parents=True, exist_ok=True)
+    if os.name == "nt":
+        # Junctions work on Windows without enabling Developer Mode or administrator rights.
+        subprocess.run(
+            ["cmd", "/c", "mklink", "/J", str(link), str(target)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    else:
+        link.symlink_to(target, target_is_directory=True)
+    before = {path: path.read_bytes() for path in outside.rglob("*") if path.is_file()}
+    redirected_run = Path("reports/runs") / run.name
+    with pytest.raises(ValueError, match="must remain inside the project"):
+        read_run_report(root, redirected_run)
+    # The writer must enforce its boundary even if its input adapter has already succeeded.
+    monkeypatch.setattr("sasguard.reporting.render.read_run_report", lambda *args: report)
+    with pytest.raises(ValueError, match="must remain inside the project"):
+        write_run_report(root, redirected_run, output_directory=Path("reports/runs/new-draft"))
+    after = {path: path.read_bytes() for path in outside.rglob("*") if path.is_file()}
+    assert after == before
+    assert not (root / "reports/runs/new-draft").exists()
 
 
 def test_markdown_escapes_schema_metadata(tmp_path: Path) -> None:

@@ -7,8 +7,8 @@ import json
 from pathlib import Path
 from uuid import uuid4
 
-from sasguard.reporting.models import RunReport
-from sasguard.reporting.reader import read_run_report
+from sasguard.reporting.models import RunReport, ScopeStatus
+from sasguard.reporting.reader import read_run_report, report_runs_directory
 
 
 def _md(value: object) -> str:
@@ -18,6 +18,30 @@ def _md(value: object) -> str:
     for character in ("\\", "|", "`", "*", "_", "[", "]", "#"):
         text = text.replace(character, "\\" + character)
     return text
+
+
+def _mortality_match_summary(report: RunReport) -> str | None:
+    if report.scope_status is not ScopeStatus.VERIFIED:
+        return None
+    artifact = next((item for item in report.artifacts if item.name == "OUTCOME_MORTALITY"), None)
+    if artifact is None:
+        return None
+    if (
+        artifact.actual_rows is not None
+        and artifact.actual_rows >= 0
+        and artifact.actual_rows == artifact.expected_rows
+        and artifact.actual_columns
+        and artifact.actual_columns == artifact.expected_columns
+    ):
+        return (
+            "The saved comparison matched the Mortality output to the supplied SAS reference "
+            f"across {artifact.actual_rows:,} provider rows and "
+            f"{len(artifact.actual_columns):,} columns, within the configured tolerances."
+        )
+    return (
+        "The saved Mortality comparison passed against the supplied SAS reference "
+        "under the configured comparison policy."
+    )
 
 
 def render_handoff(report: RunReport) -> str:
@@ -37,22 +61,29 @@ def render_handoff(report: RunReport) -> str:
         "",
         f"Scope: {_md(report.scope)}",
         "",
-        "Code origin: "
-        + (
-            "human-written reference Python."
-            if report.code_origin == "human_reference"
-            else "model-generated candidate Python."
-        ),
-        f"Recorded execution: {_md(report.execution_status)}.",
-        f"Recorded comparison: {_md(report.validation_status)}.",
-        "Human review of this run: not recorded.",
-        "",
-        "Hospital processing totals, eligibility totals, and final ratings are not available "
-        "from this partial run. This is not a CMS ratings report.",
-        "",
-        "## Limits",
-        "",
     ]
+    summary = _mortality_match_summary(report)
+    if summary is not None:
+        lines.extend([summary, ""])
+    lines.extend(
+        [
+            "Code origin: "
+            + (
+                "human-written reference Python."
+                if report.code_origin == "human_reference"
+                else "model-generated candidate Python."
+            ),
+            f"Recorded execution: {_md(report.execution_status)}.",
+            f"Recorded comparison: {_md(report.validation_status)}.",
+            "Human review of this run: not recorded.",
+            "",
+            "Hospital processing totals, eligibility totals, and final ratings are not available "
+            "from this partial run. This is not a CMS ratings report.",
+            "",
+            "## Limits",
+            "",
+        ]
+    )
     lines.extend(f"* {_md(limit)}" for limit in report.limitations)
     if report.evidence_integrity != "matched":
         lines.extend(
@@ -213,7 +244,7 @@ def write_run_report(
     target = output_directory or Path("reports/runs") / f"handoff-{uuid4()}"
     target = (target if target.is_absolute() else root / target).resolve()
     if (
-        target.parent != (root / "reports" / "runs").resolve()
+        target.parent != report_runs_directory(root)
         or target.is_relative_to(run)
         or run.is_relative_to(target)
     ):

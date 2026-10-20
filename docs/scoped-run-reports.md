@@ -38,6 +38,8 @@ The command prints the new directory under ignored `reports/runs/handoff-<UUID>/
 To select a destination, append `--output-directory reports/runs/my-review-draft`. It must be
 a new directory, separate from the source run. Existing files and directories are never
 overwritten. Both input and output must be direct child directories of `reports/runs/`.
+The resolved run store must stay inside the project. Symlinks or Windows junctions that
+redirect `reports/` or `reports/runs/` outside the project, or back to its root, are rejected.
 Nested candidate output directories are not accepted as host-produced run evidence.
 The original run is read-only to the renderer. Use a completed or stopped run, not one whose
 controller is still writing metadata. This is a saved-record summary, not a live monitor.
@@ -58,6 +60,9 @@ repair counts come from its manifest; absent synthetic repair metadata stays unk
 SAS-reference comparison, frozen policy, matching sidecars, matching source/input/output
 hashes, and the current protected-reference checks agree. It does not imply that Program 0
 was reproduced. Mortality uses the supplied standardized intermediate as an input boundary.
+Its handoff includes the matched provider-row and column counts when those counts are
+available and agree. These describe the saved Mortality comparison, not pipeline-wide
+hospital processing totals. Failed, synthetic, and unconfirmed runs do not get that match claim.
 
 A recorded generation, execution, or comparison failure produces `FAILED` when the evidence
 is consistent. Missing validation, conflicting records, or unconfirmed hashes produce
