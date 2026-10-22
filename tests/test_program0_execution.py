@@ -237,3 +237,60 @@ def test_cli_keeps_collection_separate_from_parity(staged_repo: SimpleNamespace)
     assert result.exit_code == 0
     assert "ready_for_validation" in result.stdout
     assert "SAS comparison: not run" in result.stdout
+
+
+def test_optional_validator_runs_after_collection_and_is_saved(
+    staged_repo: SimpleNamespace,
+) -> None:
+    calls = []
+
+    def validator(project_root, output_directory, expected_sha256):
+        assert len(staged_repo.calls) == 1
+        assert staged_repo.integrity_checks == 2
+        assert all((output_directory / name).is_file() for name in expected_sha256)
+        calls.append(dict(expected_sha256))
+        return program0.CandidateValidationResult(status="hash_mismatch")
+
+    report, path = program0.run_program0_candidate(
+        staged_repo.root, staged_repo.candidate, validator=validator
+    )
+    assert len(calls) == 1
+    assert report.validation_status == "hash_mismatch"
+    assert report.execution_result.passed
+    assert report.status is program0.CandidateStatus.READY
+    saved = program0.CandidateReport.model_validate_json(path.read_text())
+    assert saved == report
+
+
+def test_syntax_error_does_not_call_optional_validator(staged_repo: SimpleNamespace) -> None:
+    staged_repo.candidate.write_bytes(b"def broken(:")
+
+    def forbidden(*args):
+        raise AssertionError("syntax failure must not reach the validator")
+
+    report, _ = program0.run_program0_candidate(
+        staged_repo.root, staged_repo.candidate, validator=forbidden
+    )
+    assert report.validation_status == "not_run"
+
+
+def test_postrun_integrity_failure_never_calls_optional_validator(
+    staged_repo: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    outcomes = iter((True, False))
+    monkeypatch.setattr(
+        program0, "load_and_verify_integrity", lambda *args: SimpleNamespace(passed=next(outcomes))
+    )
+    calls = []
+
+    def forbidden(*args):
+        calls.append(args)
+        raise AssertionError("integrity failure must not reach validation")
+
+    report, path = program0.run_program0_candidate(
+        staged_repo.root, staged_repo.candidate, validator=forbidden
+    )
+    assert report.status is program0.CandidateStatus.INTEGRITY_FAILED
+    assert report.validation_status == "not_run"
+    assert calls == []
+    assert program0.CandidateReport.model_validate_json(path.read_text()) == report

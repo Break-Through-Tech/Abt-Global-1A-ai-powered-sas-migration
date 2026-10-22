@@ -91,7 +91,7 @@ See [Isolated runner](isolated-runner.md) for those boundaries and their limitat
 
 The command exits with code 0 for `ready_for_validation`, 1 for recorded execution or collection
 failures, and 2 for startup failures such as an invalid candidate path or a failed initial integrity
-check. Every report keeps `validation_status` as `not_run` and `human_review` as `not_recorded`.
+check. The CLI keeps `validation_status` as `not_run` and `human_review` as `not_recorded`.
 Successful execution and readable CSVs alone do not establish correct values or analytical schemas.
 
 ## Handoff to the shared validator
@@ -113,3 +113,61 @@ It can read trusted SAS artifacts on the host after the candidate container has 
 
 This branch provides the execution and collection side of #47. End-to-end integration and the
 issue's final acceptance depend on #44. The model-generated baseline remains tracked in #48.
+
+## Prepared validator adapter
+
+The Python API now accepts an optional `validator` callback. The CLI does not enable one yet.
+The callback runs on the host after successful execution, complete collection, and the post-run
+protected-artifact check. It receives the resolved project root, output directory, and original
+`filename -> SHA-256` mapping from collection. It must check these hashes before comparing values.
+The adapter does not refresh hashes to accept changed outputs, read SAS references, or implement
+numerical comparison rules.
+
+Tony confirmed the proposed call on #44:
+
+```python
+validate_program0_outputs(project_root, output_directory, expected_sha256)
+```
+
+The exact per-artifact return fields and import path remain to be confirmed in his PR.
+Our callback boundary uses `CandidateValidationResult(status=..., artifact_results=...)`, where
+`artifact_results` maps the three CSV filenames to the existing `ArtifactComparison` objects.
+A thin wrapper will convert his result to this format if needed. No placeholder validator is
+installed, and tests with fake callbacks do not establish SAS parity.
+
+The adapter records these validation outcomes separately from execution and collection:
+
+| Validation status | Meaning |
+|---|---|
+| `not_run` | No callback was supplied, or execution/collection did not qualify. |
+| `passed` | The callback returned passing SAS comparisons for all three declared artifacts. |
+| `failed` | At least one returned SAS artifact comparison failed. |
+| `hash_mismatch` | The validator reported that a collected output changed. |
+| `missing_outputs` | The validator reported a missing file after collection. |
+| `malformed_outputs` | The validator could not read an output after collection. |
+| `validator_error` | The callback raised an exception or returned inconsistent metadata/results. |
+
+The candidate's collection `status` and `execution_result` do not change when validation fails.
+A claimed pass with missing comparisons, a mismatched artifact name, or a non-SAS authority is
+rejected. Callback errors never become numerical mismatches or passes. Human review remains
+`not_recorded`. An existing validation result is not silently replaced by calling the adapter
+again. The adapter returns a new report; `run_program0_candidate` saves that report as part of
+the fresh run. It does not edit older run records.
+
+Run the adapter tests without Docker or SAS execution:
+
+```text
+python -m pytest tests/test_program0_validation_adapter.py tests/test_program0_execution.py -q
+```
+
+The real Docker tests also exercise the callback handoff, saved report, and separation from
+the execution manifest. They use stub validation results and synthetic CSVs, not trusted SAS
+comparisons. They confirm that a real container can produce the files before a host callback
+records its outcome. Runtime failures, timeouts, and rejected output paths must never invoke
+that callback. These checks do not complete #44 or establish Program 0 numerical parity.
+
+With `SASGUARD_RUN_DOCKER_TESTS=1` set in the host environment, run:
+
+```text
+python -m pytest tests/integration/test_program0_candidate_docker.py -q
+```
