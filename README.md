@@ -126,6 +126,9 @@ supplied `data/` directory is mounted read-only inside the container.
 See [Development setup](docs/development-setup.md) for VS Code Dev Containers, optional local
 Python environments, and troubleshooting.
 
+To run a standalone generated Program 0 candidate in the isolated runner and collect its three
+CSV outputs, see [Program 0 candidate execution](docs/program-0-candidate-execution.md).
+
 For a local model experiment with synthetic SAS, see
 [Test a local model](docs/local-model-smoke.md). It uses native Ollama for generation,
 the isolated Docker runner for execution, and a deterministic check on the host.

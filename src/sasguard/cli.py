@@ -8,6 +8,8 @@ import typer
 
 from sasguard import __version__
 from sasguard.config import load_project_configuration
+from sasguard.execution.program0 import run_program0_candidate
+from sasguard.execution.runner import RunnerLimits
 from sasguard.program0 import translate_program0
 from sasguard.prototypes.local_model import run_local_model_smoke, run_local_model_suite
 from sasguard.prototypes.mortality import run_mortality_prototype
@@ -155,6 +157,34 @@ def mortality_prototype(
         f"Trace: {report_path.with_name('trace.json')}. Other pipeline outputs are not checked."
     )
     if not comparison.passed:
+        raise typer.Exit(code=1)
+
+
+@app.command("run-program0-candidate")
+def run_program0_candidate_command(
+    candidate: Annotated[Path, typer.Argument(help="Standalone generated Python entry point.")],
+    project_root: Annotated[Path, typer.Option(help="Repository root.")] = Path("."),
+    image: Annotated[str, typer.Option(help="Existing isolated Docker runner image.")] = (
+        "sasguard-runner:local"
+    ),
+    timeout_seconds: Annotated[
+        float, typer.Option(min=0.01, max=600, help="Generated-code execution timeout.")
+    ] = 60,
+) -> None:
+    """Execute a Program 0 candidate and collect CSVs for separate host validation."""
+    try:
+        result, report = run_program0_candidate(
+            project_root,
+            candidate,
+            image=image,
+            limits=RunnerLimits(timeout_seconds=timeout_seconds),
+        )
+    except (OSError, ValueError) as error:
+        typer.echo(f"Program 0 candidate could not start: {error}", err=True)
+        raise typer.Exit(code=2) from error
+    typer.echo(f"Program 0 candidate: {result.status}. Report: {report}")
+    typer.echo("SAS comparison: not run.")
+    if not result.ready_for_validation:
         raise typer.Exit(code=1)
 
 
