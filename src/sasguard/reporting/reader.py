@@ -365,6 +365,10 @@ def read_run_report(project_root: Path, run_directory: Path) -> RunReport:
     if run.parent != runs:
         raise ValueError("report input must be a top-level saved run inside reports/runs")
     if (run / "manifest.json").is_file():
+        if (run / "report.json").is_file():
+            from sasguard.reporting.program0 import read_program0_report
+
+            return read_program0_report(root, run)
         return _mortality(root, run)
     if (run / "report.json").is_file():
         return _synthetic(run)

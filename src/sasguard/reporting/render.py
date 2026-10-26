@@ -72,6 +72,8 @@ def render_handoff(report: RunReport) -> str:
                 "human-written reference Python."
                 if report.code_origin == "human_reference"
                 else "model-generated candidate Python."
+                if report.code_origin == "model_generated"
+                else "not recorded; do not infer AI generation or human authorship."
             ),
             f"Recorded execution: {_md(report.execution_status)}.",
             f"Recorded comparison: {_md(report.validation_status)}.",
@@ -80,10 +82,48 @@ def render_handoff(report: RunReport) -> str:
             "Hospital processing totals, eligibility totals, and final ratings are not available "
             "from this partial run. This is not a CMS ratings report.",
             "",
-            "## Limits",
-            "",
         ]
     )
+    if report.report_kind == "program0":
+        outcome_description = {
+            "passed": "All three declared outputs passed the recorded SAS comparison.",
+            "failed": "At least one artifact failed its recorded SAS comparison.",
+            "not_run": "No SAS comparison was recorded.",
+            "hash_mismatch": "The validator reported an output changed after collection.",
+            "missing_outputs": "The validator reported missing output files.",
+            "malformed_outputs": "The validator could not read or align output files.",
+            "validator_error": "The validator did not complete; no comparison pass is established.",
+        }.get(report.validation_outcome or "", "Validation outcome was not recorded.")
+        lines.extend(
+            [
+                "",
+                f"Input source: {_md(report.input_format)}.",
+                f"Recorded generation: {_md(report.generation_status)}.",
+                f"Collection outcome: {_md(report.collection_status)}.",
+                f"Recorded validator outcome: {_md(report.validation_outcome)}.",
+                outcome_description,
+                "",
+                "## Program 0 artifact results",
+                "",
+            ]
+        )
+        lines.extend(f"* {_md(item.name)}: {_md(item.status)}." for item in report.artifacts)
+        lines.extend(
+            [
+                "",
+                "This is a Program 0 demonstration, not a verified full-pipeline "
+                "or CMS ratings report.",
+            ]
+        )
+        if report.scope_status is ScopeStatus.VERIFIED:
+            lines.extend(
+                [
+                    "",
+                    "All three declared Program 0 outputs matched their supplied SAS references "
+                    "under the recorded comparison rules.",
+                ]
+            )
+    lines.extend(["", "## Limits", ""])
     lines.extend(f"* {_md(limit)}" for limit in report.limitations)
     if report.evidence_integrity != "matched":
         lines.extend(
@@ -105,6 +145,9 @@ def render_handoff(report: RunReport) -> str:
 
 
 def render_technical(report: RunReport) -> str:
+    model_identifier = report.model_name or (
+        "Not recorded" if report.code_origin == "not_recorded" else "Not applicable"
+    )
     lines = [
         "# Abt technical validation record",
         "",
@@ -124,7 +167,14 @@ def render_technical(report: RunReport) -> str:
         f"| Deterministic comparison | {_md(report.validation_status)} |",
         "| Human review of run | Not recorded |",
         "",
-        f"Model identifier: {_md(report.model_name or 'Not applicable')}",
+        f"Model identifier: {_md(model_identifier)}",
+        f"Input source: {_md(report.input_format)}",
+        f"Collection outcome: {_md(report.collection_status)}",
+        f"Recorded validator outcome: {_md(report.validation_outcome)}",
+        "Validator failure artifacts: "
+        + (", ".join(_md(name) for name in report.validation_failure_files) or "None recorded"),
+        "Exact statistic rows: "
+        + (", ".join(_md(name) for name in report.exact_statistic_rows) or "Not recorded"),
         "Validation contract: "
         + _md(report.validation_policy_version or "Recorded artifact policy"),
         f"Docker image ID: {_md(report.docker_image_id or 'Not recorded')}",

@@ -167,7 +167,7 @@ Generated Python runs in a separate network-disabled Docker service that cannot 
 outputs. See [Isolated generated-code runner](docs/isolated-runner.md) for its access boundary,
 PowerShell and zsh commands, machine-readable results, and limitations.
 
-Existing Mortality and individual synthetic run records can be summarized as separate internal
+Existing Program 0, Mortality, and individual synthetic run records can be summarized as internal
 handoff and technical drafts. See [Scoped run reports](docs/scoped-run-reports.md) for the
 command, supported layouts, privacy limits, and the distinction between scoped verification
 and a complete CMS result.

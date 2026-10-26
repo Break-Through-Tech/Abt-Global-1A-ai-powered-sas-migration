@@ -4,10 +4,41 @@
 rerunning its numerical comparisons. It creates an internal draft for an Abt staff member
 to review. The report is not automatically approved for CMS release.
 
-This first version supports the existing bounded Mortality bundle and an individual synthetic
-local-model attempt. It does not yet support Program 0 candidates, suite indexes, numeric
+This version supports the existing bounded Mortality bundle, an individual synthetic
+local-model attempt, and Program 0 candidate runs. It does not support suite indexes, numeric
 reassessment indexes, or a complete CMS pipeline. Issue #52 stays open until reporting can
 consume the integrated pipeline's results and Abt confirms the final handoff fields.
+
+## Program 0 run summaries
+
+After running a Program 0 candidate, summarize its saved directory:
+
+```text
+python -m sasguard.cli report-run reports/runs/program0-candidate-<UUID>
+```
+
+The short handoff names all three declared artifacts and their recorded checks. It preserves
+the original input mode, separates collection from validation, and states the full-pipeline
+and CMS-rating limits. Counts in the technical report are artifact rows, not final hospital
+eligibility or processing totals. Known file-level validation failures are described by status
+and artifact name; raw error messages and provider-key lists are not copied into reports.
+
+Program 0 execution records do not establish who authored the code or whether a model generated
+it. Both claims remain `not_recorded`, including when a person knows the run was a human control.
+Likewise, a successful process or a PR review is not a recorded human review of this run.
+
+New runs using the real validator wrapper record policy snapshots, exact statistic rows,
+validator/configuration/loader hashes, trusted-reference hashes, and the candidate and collected
+output hashes. The wrapper checks those files before and after comparison. The reporting reader
+checks the saved snapshots against current files and the protected baseline; it never repeats
+the numerical comparison. `N`, `MIN`, and `MAX` are exact; moment tolerances stay in the recorded
+policy. The technical report shows both rules.
+
+A passing Program 0 scope is `VERIFIED` only when all three passing SAS comparisons and their
+recorded execution, source, staged input, output, policy, and reference evidence agree. An older
+run without a validation snapshot can still be summarized, but its recorded pass is
+`NOT VERIFIED`, not evidence that the current policy ran. Changed evidence also removes the
+verified claim. This remains a summary of trusted host-produced records, not a signed attestation.
 
 ## Generate a report
 
@@ -56,7 +87,7 @@ human review. A PR approval is not a recorded review of a particular run. Human 
 therefore `not_recorded` in this version. Manual changes are also not inferred. Mortality
 repair counts come from its manifest; absent synthetic repair metadata stays unknown.
 
-`VERIFIED` applies only to the declared Mortality scope when successful execution, passing
+For Mortality, `VERIFIED` applies only to its declared scope when successful execution, passing
 SAS-reference comparison, frozen policy, matching sidecars, matching source/input/output
 hashes, and the current protected-reference checks agree. It does not imply that Program 0
 was reproduced. Mortality uses the supplied standardized intermediate as an input boundary.

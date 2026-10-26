@@ -44,15 +44,20 @@ class RunReport(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
     schema_version: Literal[1] = 1
-    report_kind: Literal["mortality", "synthetic"]
+    report_kind: Literal["mortality", "synthetic", "program0"]
     run_id: str
     run_timestamp: datetime | None
     input_release: str
     scope: str
-    code_origin: Literal["human_reference", "model_generated"]
-    generation_status: Literal["not_applicable", "succeeded", "failed"]
+    code_origin: Literal["human_reference", "model_generated", "not_recorded"]
+    generation_status: Literal["not_applicable", "succeeded", "failed", "not_recorded"]
     execution_status: str
     validation_status: Literal["passed", "failed", "not_run"]
+    input_format: Literal["csv", "sas7bdat"] | None = None
+    collection_status: str | None = None
+    validation_outcome: str | None = None
+    validation_failure_files: tuple[str, ...] = ()
+    exact_statistic_rows: tuple[str, ...] = ()
     evidence_integrity: Literal["matched", "not_confirmed"]
     evidence_issues: tuple[str, ...] = ()
     model_name: str | None = None
@@ -83,10 +88,11 @@ class RunReport(BaseModel):
             self.generation_status == "failed"
             or self.execution_status not in ("succeeded", "not_recorded")
             or self.validation_status == "failed"
+            or (self.report_kind == "program0" and self.collection_status != "ready_for_validation")
         ):
             return ScopeStatus.FAILED
         if (
-            self.report_kind == "mortality"
+            self.report_kind in ("mortality", "program0")
             and self.execution_status == "succeeded"
             and self.validation_status == "passed"
             and self.artifacts

@@ -209,3 +209,21 @@ known export-precision failure. These are human controls, not model-generated tr
 ```text
 python -m pytest tests/integration/test_program0_validated_execution.py -q
 ```
+
+## Save comparison evidence and summarize a run
+
+The real validator wrapper now saves `validation_evidence` in `report.json`: policy snapshots,
+exact statistic rows, source/configuration/loader hashes, trusted reference hashes, original
+collected-output hashes, and the candidate hash. The wrapper checks those files before and after
+comparison. It does not put reference rows or source code in that evidence object.
+
+Use the reporting command on the saved run directory to create an internal handoff, technical
+record, and privacy-limited JSON without rerunning code:
+
+```text
+python -m sasguard.cli report-run reports/runs/program0-candidate-<UUID>
+```
+
+See [Scoped run reports](scoped-run-reports.md). Older runs without comparison snapshots remain
+readable but cannot establish current verification. Reports do not infer human authorship or
+AI generation from a standalone candidate file or a missing model identifier.
