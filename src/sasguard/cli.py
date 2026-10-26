@@ -8,7 +8,11 @@ import typer
 
 from sasguard import __version__
 from sasguard.config import load_project_configuration
-from sasguard.execution.program0 import run_program0_candidate
+from sasguard.execution.program0 import (
+    CandidateInputFormat,
+    run_program0_candidate,
+    validate_collected_program0,
+)
 from sasguard.execution.runner import RunnerLimits
 from sasguard.program0 import translate_program0
 from sasguard.prototypes.local_model import run_local_model_smoke, run_local_model_suite
@@ -170,6 +174,13 @@ def run_program0_candidate_command(
     timeout_seconds: Annotated[
         float, typer.Option(min=0.01, max=600, help="Generated-code execution timeout.")
     ] = 60,
+    validate: Annotated[
+        bool, typer.Option("--validate", help="Compare collected outputs with SAS on the host.")
+    ] = False,
+    input_format: Annotated[
+        CandidateInputFormat,
+        typer.Option(help="Supplied input source; sas7bdat stages a full-precision CSV."),
+    ] = CandidateInputFormat.CSV,
 ) -> None:
     """Execute a Program 0 candidate and collect CSVs for separate host validation."""
     try:
@@ -178,13 +189,20 @@ def run_program0_candidate_command(
             candidate,
             image=image,
             limits=RunnerLimits(timeout_seconds=timeout_seconds),
+            validator=validate_collected_program0 if validate else None,
+            input_format=input_format,
         )
     except (OSError, ValueError) as error:
         typer.echo(f"Program 0 candidate could not start: {error}", err=True)
         raise typer.Exit(code=2) from error
     typer.echo(f"Program 0 candidate: {result.status}. Report: {report}")
-    typer.echo("SAS comparison: not run.")
-    if not result.ready_for_validation:
+    if result.validation_status == "not_run":
+        typer.echo("SAS comparison: not run.")
+    else:
+        typer.echo(f"SAS comparison: {result.validation_status}.")
+    if validate:
+        typer.echo("Scope: Program 0 only. Full pipeline and CMS ratings are not verified.")
+    if not result.ready_for_validation or (validate and result.validation_status != "passed"):
         raise typer.Exit(code=1)
 
 

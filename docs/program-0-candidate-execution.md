@@ -1,8 +1,8 @@
 # Execute a Program 0 candidate
 
 The host command stages a standalone Python candidate, runs it through the existing isolated
-Docker runner, and collects the three Program 0 CSVs. It makes no model call. Numerical comparison
-against SAS is the separate validator tracked in issue #44.
+Docker runner, and collects the three Program 0 CSVs. It makes no model call. With `--validate`,
+it calls the shared host-side validator after execution and collection.
 
 ## Candidate contract
 
@@ -51,6 +51,24 @@ The following command works in PowerShell and zsh with that environment active:
 python -m sasguard.cli run-program0-candidate generated/program0.py
 ```
 
+To validate against SAS using the supplied SAS source input at full precision:
+
+```text
+python -m sasguard.cli run-program0-candidate generated/program0.py --input-format sas7bdat --validate
+```
+
+The default `--input-format csv` still copies the supplied CSV unchanged. In `sas7bdat` mode,
+the host reads only the supplied `alldata_2025jul.sas7bdat` input and exports it to the staged
+`alldata_2025jul.csv` using 17 significant digits. The candidate still receives the same CSV
+filename and contract, not a SAS binary or any trusted output. Source input and staged CSV hashes
+are recorded separately in `staging.json`; the manifest identifies the chosen original input.
+
+The supplied CSV differs from the supplied SAS input in 9,494 cells across 15 numeric columns,
+with maximum absolute difference about `1.11e-16`. Those small input-export differences can
+change raw extrema, which the validator deliberately checks exactly. The reference Docker
+control therefore uses the lossless SAS-input export. CSV-based failures are retained rather
+than hidden by wider tolerances. Do not silently switch input sources between experiments.
+
 Without activation, replace `python` with `.\.venv\Scripts\python.exe` in PowerShell or
 `./.venv/bin/python` in zsh. Run from the repository root on the host, not inside the development
 container. `--project-root` selects another checkout, `--image` selects an existing runner image,
@@ -89,21 +107,29 @@ See [Isolated runner](isolated-runner.md) for those boundaries and their limitat
 | `integrity_failed` | A protected supplied artifact changed after execution. |
 | `ready_for_validation` | All three declared CSVs are readable and ready for host-side SAS comparison. |
 
-The command exits with code 0 for `ready_for_validation`, 1 for recorded execution or collection
-failures, and 2 for startup failures such as an invalid candidate path or a failed initial integrity
-check. The CLI keeps `validation_status` as `not_run` and `human_review` as `not_recorded`.
+Without `--validate`, the command exits with code 0 for `ready_for_validation`, 1 for recorded
+execution or collection failures, and 2 for startup failures. With `--validate`, code 0 also
+requires a passing SAS comparison. Validation failures and validator errors exit with code 1.
+Human review remains `not_recorded`. The collection status stays separate from validation.
 Successful execution and readable CSVs alone do not establish correct values or analytical schemas.
 
 ## Handoff to the shared validator
 
 ```python
 from pathlib import Path
-from sasguard.execution.program0 import run_program0_candidate
+from sasguard.execution.program0 import (
+    CandidateInputFormat,
+    run_program0_candidate,
+    validate_collected_program0,
+)
 
-result, report_path = run_program0_candidate(Path("."), Path("generated/program0.py"))
-if result.ready_for_validation:
-    output_directory = report_path.parent / "output"
-    # Pass output_directory to the host-side three-artifact validator from #44.
+result, report_path = run_program0_candidate(
+    Path("."),
+    Path("generated/program0.py"),
+    input_format=CandidateInputFormat.SAS7BDAT,
+    validator=validate_collected_program0,
+)
+print(result.execution_result, result.validation_status)
 ```
 
 `result.artifacts` maps each filename to its path relative to the run directory, hash, row count,
@@ -111,12 +137,13 @@ and canonical column names. The validator should check the recorded hashes befor
 those files, then apply its own artifact-specific schema, key, missingness, and numerical rules.
 It can read trusted SAS artifacts on the host after the candidate container has stopped.
 
-This branch provides the execution and collection side of #47. End-to-end integration and the
-issue's final acceptance depend on #44. The model-generated baseline remains tracked in #48.
+The local integration combines #53, #55, and corrected #58. These PRs still need team review
+and merging. Its passing reference control is human-written, not a model-generated baseline.
+The model-generated baseline remains tracked in #48.
 
-## Prepared validator adapter
+## Validator adapter
 
-The Python API now accepts an optional `validator` callback. The CLI does not enable one yet.
+The Python API accepts an optional `validator` callback. The CLI enables it only with `--validate`.
 The callback runs on the host after successful execution, complete collection, and the post-run
 protected-artifact check. It receives the resolved project root, output directory, and original
 `filename -> SHA-256` mapping from collection. It must check these hashes before comparing values.
@@ -129,11 +156,12 @@ Tony confirmed the proposed call on #44:
 validate_program0_outputs(project_root, output_directory, expected_sha256)
 ```
 
-The exact per-artifact return fields and import path remain to be confirmed in his PR.
-Our callback boundary uses `CandidateValidationResult(status=..., artifact_results=...)`, where
+The implementation is `sasguard.verification.program0.validate_program0_outputs`.
+Our callback uses `CandidateValidationResult(status=..., artifact_results=..., errors=...)`, where
 `artifact_results` maps the three CSV filenames to the existing `ArtifactComparison` objects.
-A thin wrapper will convert his result to this format if needed. No placeholder validator is
-installed, and tests with fake callbacks do not establish SAS parity.
+The wrapper `validate_collected_program0` converts the shared result without discarding its
+per-file errors. `report.json` retains them in `validation_errors`, separately from a callback
+exception in `validation_error`. Tests with fake callbacks do not establish SAS parity.
 
 The adapter records these validation outcomes separately from execution and collection:
 
@@ -160,14 +188,24 @@ Run the adapter tests without Docker or SAS execution:
 python -m pytest tests/test_program0_validation_adapter.py tests/test_program0_execution.py -q
 ```
 
-The real Docker tests also exercise the callback handoff, saved report, and separation from
+The synthetic Docker tests exercise the callback handoff, saved report, and separation from
 the execution manifest. They use stub validation results and synthetic CSVs, not trusted SAS
 comparisons. They confirm that a real container can produce the files before a host callback
 records its outcome. Runtime failures, timeouts, and rejected output paths must never invoke
-that callback. These checks do not complete #44 or establish Program 0 numerical parity.
+that callback. These stub checks do not establish Program 0 numerical parity.
 
 With `SASGUARD_RUN_DOCKER_TESTS=1` set in the host environment, run:
 
 ```text
 python -m pytest tests/integration/test_program0_candidate_docker.py -q
+```
+
+`tests/integration/test_program0_validated_execution.py` is a separate real-data test. It runs
+a standalone copy of the human Program 0 reference in Docker with the lossless input staging,
+then checks all three outputs against SAS on the host. Four executable but wrong copies change
+one statistic or skip a direction reversal; all must fail. A CSV-source control retains the
+known export-precision failure. These are human controls, not model-generated translations.
+
+```text
+python -m pytest tests/integration/test_program0_validated_execution.py -q
 ```
