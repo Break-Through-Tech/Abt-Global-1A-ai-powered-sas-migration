@@ -27,7 +27,7 @@ from sasguard.verification.policy import (
 
 CONFIG_PATH = Path("configs/cms_2025jul.yaml")
 POLICY_PATH = Path("configs/program0-comparison-policies.json")
-EXACT_STATISTIC_ROWS = ("N", "MIN", "MAX")
+EXACT_STATISTIC_ROWS: tuple[Literal["N"], Literal["MIN"], Literal["MAX"]] = ("N", "MIN", "MAX")
 
 # Output CSV filename -> trusted SAS artifact name in the project configuration.
 PROGRAM0_ARTIFACTS: dict[str, str] = {

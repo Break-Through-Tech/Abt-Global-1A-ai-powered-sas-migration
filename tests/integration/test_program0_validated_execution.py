@@ -15,6 +15,9 @@ from sasguard.execution.program0 import (
     validate_collected_program0,
 )
 from sasguard.provenance.hashing import sha256_file
+from sasguard.reporting import write_run_report
+from sasguard.reporting.models import ScopeStatus
+from sasguard.reporting.reader import read_run_report
 from sasguard.verification.integrity import load_and_verify_integrity
 
 pytestmark = pytest.mark.docker_integration
@@ -93,6 +96,14 @@ for name, frame in (
             ]
     assert CandidateReport.model_validate_json(path.read_bytes()) == report
     assert report.human_review == "not_recorded"
+    assert report.validation_evidence is not None
+    summary = read_run_report(ROOT, path.parent)
+    assert summary.scope_status is (ScopeStatus.VERIFIED if mistake is None else ScopeStatus.FAILED)
+    assert summary.input_format == input_format.value
+    assert summary.code_origin == summary.generation_status == "not_recorded"
+    assert summary.evidence_integrity == "matched", summary.evidence_issues
+    destination = write_run_report(ROOT, path.parent)
+    assert "Full-pipeline status: NOT VERIFIED" in (destination / "handoff.md").read_text()
     staged = path.parent / "input/alldata_2025jul.csv"
     assert sorted(item.name for item in staged.parent.iterdir()) == [
         "alldata_2025jul.csv",

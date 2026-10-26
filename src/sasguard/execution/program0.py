@@ -14,6 +14,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from sasguard.config import load_project_configuration
 from sasguard.data import load_artifact
 from sasguard.execution.environment import collect_python_environment
 from sasguard.execution.manifest import RunManifest
@@ -22,7 +23,13 @@ from sasguard.execution.runner import DockerExecutionRunner, RunnerLimits
 from sasguard.provenance.hashing import hash_files, sha256_file, validate_sha256
 from sasguard.verification.artifact import ArtifactComparison, ReferenceSource
 from sasguard.verification.integrity import load_and_verify_integrity
-from sasguard.verification.program0 import validate_program0_outputs
+from sasguard.verification.policy import ArtifactComparisonPolicy
+from sasguard.verification.program0 import (
+    EXACT_STATISTIC_ROWS,
+    PROGRAM0_ARTIFACTS,
+    load_program0_policies,
+    validate_program0_outputs,
+)
 
 INPUT_PATH = "data/Project_1/Starrating/alldata_2025jul.csv"
 PROGRAM_PATH = "data/Project_1/SAS Programs/0 - Data and Measure Standardization_2025Jul.sas"
@@ -34,6 +41,28 @@ OUTPUT_FILENAMES = (
 ValidationStatus = Literal[
     "passed", "failed", "hash_mismatch", "missing_outputs", "malformed_outputs"
 ]
+VALIDATION_SOURCE_PATHS = (
+    "configs/program0-comparison-policies.json",
+    "configs/cms_2025jul.yaml",
+    "configs/protected-artifacts.json",
+    "src/sasguard/verification/program0.py",
+    "src/sasguard/verification/comparator.py",
+    "src/sasguard/verification/policy.py",
+    "src/sasguard/data/loading.py",
+    "src/sasguard/columns.py",
+)
+
+
+class Program0ValidationEvidence(BaseModel):
+    """Host-recorded inputs to a comparison, without reference rows or source code."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    schema_version: Literal[1] = 1
+    project_hashes: dict[str, str]
+    policies: dict[str, ArtifactComparisonPolicy]
+    exact_statistic_rows: tuple[Literal["N"], Literal["MIN"], Literal["MAX"]]
+    output_hashes: dict[str, str]
+    candidate_sha256: str
 
 
 class CandidateInputFormat(StrEnum):
@@ -50,6 +79,7 @@ class CandidateValidationResult(BaseModel):
     status: ValidationStatus
     artifact_results: dict[str, ArtifactComparison] = Field(default_factory=dict)
     errors: dict[str, str] = Field(default_factory=dict)
+    evidence: Program0ValidationEvidence | None = None
 
     @model_validator(mode="after")
     def check_comparison_claims(self) -> Self:
@@ -143,12 +173,13 @@ class CandidateReport(BaseModel):
     validation_results: dict[str, ArtifactComparison] = Field(default_factory=dict)
     validation_errors: dict[str, str] = Field(default_factory=dict)
     validation_error: str | None = None
+    validation_evidence: Program0ValidationEvidence | None = None
     human_review: Literal["not_recorded"] = "not_recorded"
 
     @model_validator(mode="after")
     def check_validation_record(self) -> Self:
         if self.validation_status == "not_run":
-            if (
+            if self.validation_evidence is not None or (
                 self.validation_results
                 or self.validation_errors
                 or self.validation_error is not None
@@ -162,7 +193,12 @@ class CandidateReport(BaseModel):
         ):
             raise ValueError("validation requires successful execution and complete collection")
         if self.validation_status == "validator_error":
-            if self.validation_results or self.validation_errors or self.validation_error is None:
+            if (
+                self.validation_results
+                or self.validation_errors
+                or self.validation_error is None
+                or self.validation_evidence is not None
+            ):
                 raise ValueError("a validator error requires an error record, not comparisons")
         else:
             CandidateValidationResult(
@@ -231,6 +267,7 @@ def apply_program0_validation(
             "validation_results": result.artifact_results,
             "validation_errors": result.errors,
             "validation_error": None,
+            "validation_evidence": result.evidence,
         }
     )
 
@@ -239,8 +276,37 @@ def validate_collected_program0(
     project_root: Path, output_directory: Path, expected_sha256: Mapping[str, str]
 ) -> CandidateValidationResult:
     """Convert the shared validator result without dropping per-file failure reasons."""
-    result = validate_program0_outputs(project_root, output_directory, expected_sha256)
-    return CandidateValidationResult.model_validate(result.model_dump())
+    root = project_root.resolve()
+    protected = root / "configs/protected-artifacts.json"
+    if not load_and_verify_integrity(root, protected).passed:
+        raise ValueError("protected artifacts changed before validation")
+    paths = load_project_configuration(
+        root / "configs/cms_2025jul.yaml", project_root=root
+    ).resolve_paths(root)
+    relatives = [
+        *VALIDATION_SOURCE_PATHS,
+        *(
+            paths.reference_sas7bdat[name].relative_to(root).as_posix()
+            for name in PROGRAM0_ARTIFACTS.values()
+        ),
+    ]
+    before = hash_files(root, relatives)
+    candidate = output_directory.parent / "source/main.py"
+    candidate_hash = sha256_file(candidate)
+    policies = load_program0_policies(root)
+    result = validate_program0_outputs(root, output_directory, expected_sha256)
+    if hash_files(root, relatives) != before or sha256_file(candidate) != candidate_hash:
+        raise ValueError(
+            "validation source, policy, reference, or candidate changed during comparison"
+        )
+    evidence = Program0ValidationEvidence(
+        project_hashes=before,
+        policies=policies,
+        exact_statistic_rows=EXACT_STATISTIC_ROWS,
+        output_hashes=dict(expected_sha256),
+        candidate_sha256=candidate_hash,
+    )
+    return CandidateValidationResult.model_validate({**result.model_dump(), "evidence": evidence})
 
 
 def _write_json(path: Path, payload: object) -> None:
