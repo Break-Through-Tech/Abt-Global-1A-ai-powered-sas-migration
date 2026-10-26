@@ -160,3 +160,19 @@ def test_hash_mapping_must_name_exactly_the_three_outputs(outputs: Path) -> None
 
     with pytest.raises(ValueError, match="exactly these outputs"):
         validate_program0_outputs(PROJECT_ROOT, outputs, recorded)
+
+
+@pytest.mark.parametrize("statistic,delta", [("N", 1e-9), ("MIN", 1e-13), ("MAX", 1e-13)])
+def test_small_changes_to_exact_statistics_fail(
+    outputs: Path, statistic: str, delta: float
+) -> None:
+    path = outputs / "measure_average_stddev_2025jul.csv"
+    frame = pd.read_csv(path, float_precision="round_trip")
+    frame.loc[frame["_STAT_"].eq(statistic), "MORT_30_AMI"] += delta
+    frame.to_csv(path, index=False, float_format="%.17g")
+    result = validate_program0_outputs(PROJECT_ROOT, outputs, hashes(outputs))
+    assert result.status == "failed"
+    comparison = result.artifact_results[path.name]
+    assert comparison.mismatched_columns == ["MORT_30_AMI"]
+    assert comparison.mismatched_cells == 1
+    assert comparison.expected_rows == comparison.actual_rows == 5

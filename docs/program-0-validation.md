@@ -38,12 +38,13 @@ The validator stops at the first stage that fails:
 | Artifact | Key | Policy |
 |---|---|---|
 | `LESS100_MEASURE` | `MEASURE_NAME` | Exact. Empty for July 2025, so a candidate passes only if it also excludes no measures. |
-| `MEASURE_AVERAGE_STDDEV_2025JUL` | `_STAT_` | `_TYPE_` and `_FREQ_` exact; the 46 measure columns use absolute and relative tolerances of `1e-12`. |
+| `MEASURE_AVERAGE_STDDEV_2025JUL` | `_STAT_` | `N`, `MIN`, and `MAX` rows exact. For `MEAN` and `STD`, measure columns use `1e-12` tolerances. `_TYPE_` and `_FREQ_` are always exact. |
 | `STD_DATA_2025JUL_ANALYSIS` | `PROVIDER_ID` | The 46 `STD_` columns use `1e-12` tolerances; all other columns are exact. |
 
-The `1e-12` tolerances match the Program 0 reference check in #53. Policies are column-based, so
-the `N`, `MIN`, and `MAX` rows of the statistics table share the `1e-12` tolerance with `MEAN` and
-`STD`, although the human reference matches them exactly.
+These rules match the Program 0 reference check in #53. The committed policy declares the
+exact statistic rows. The controller compares those rows separately with the shared comparator
+and combines their diagnostics with the tolerant comparison of the remaining rows. Numeric
+error summaries cover the tolerant rows; exact-row differences still count as mismatched cells.
 
 ## Result
 

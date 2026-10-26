@@ -1,5 +1,6 @@
 {
   "schema_version": 1,
+  "exact_statistic_rows": ["N", "MIN", "MAX"],
   "artifacts": {
     "LESS100_MEASURE": {
       "schema_version": 1,

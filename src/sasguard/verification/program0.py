@@ -8,20 +8,26 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
+from dataclasses import replace
 from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from sasguard.config import load_project_configuration
-from sasguard.data import ArtifactLoadError, load_artifact
+from sasguard.data import ArtifactLoadError, LoadedArtifact, load_artifact
 from sasguard.provenance.hashing import sha256_file, validate_sha256
 from sasguard.verification.artifact import ArtifactComparison
 from sasguard.verification.comparator import ComparisonInputError, compare_artifacts
-from sasguard.verification.policy import ArtifactComparisonPolicy
+from sasguard.verification.policy import (
+    ArtifactComparisonPolicy,
+    ColumnComparisonPolicy,
+    ComparisonKind,
+)
 
 CONFIG_PATH = Path("configs/cms_2025jul.yaml")
 POLICY_PATH = Path("configs/program0-comparison-policies.json")
+EXACT_STATISTIC_ROWS = ("N", "MIN", "MAX")
 
 # Output CSV filename -> trusted SAS artifact name in the project configuration.
 PROGRAM0_ARTIFACTS: dict[str, str] = {
@@ -59,12 +65,67 @@ def load_program0_policies(project_root: Path) -> dict[str, ArtifactComparisonPo
     payload = json.loads((project_root / POLICY_PATH).read_text(encoding="utf-8"))
     if payload.get("schema_version") != 1:
         raise ValueError("unsupported Program 0 policy schema version")
+    if payload.get("exact_statistic_rows") != list(EXACT_STATISTIC_ROWS):
+        raise ValueError("Program 0 statistics require exact N, MIN, and MAX rows")
     artifacts = payload.get("artifacts", {})
     if set(artifacts) != set(PROGRAM0_ARTIFACTS.values()):
         raise ValueError("Program 0 policies must cover exactly the three Program 0 artifacts")
     return {
         name: ArtifactComparisonPolicy.model_validate(policy) for name, policy in artifacts.items()
     }
+
+
+def _compare_statistics(
+    actual: LoadedArtifact, expected: LoadedArtifact, policy: ArtifactComparisonPolicy
+) -> ArtifactComparison:
+    """Counts and selected raw extrema are exact; computed moments keep their tolerance."""
+    artifact = "MEASURE_AVERAGE_STDDEV_2025JUL"
+    key = "_STAT_"
+    if policy.keys != (key,):
+        raise ValueError("Program 0 statistics must align by _STAT_")
+    exact_policy = ArtifactComparisonPolicy(
+        keys=policy.keys,
+        columns=tuple(
+            ColumnComparisonPolicy(name=name, kind=ComparisonKind.EXACT)
+            for name in dict.fromkeys((*expected.columns, *actual.columns))
+            if name != key
+        ),
+    )
+    checks = []
+    for exact in (True, False):
+        actual_rows = actual.frame[key].isin(EXACT_STATISTIC_ROWS)
+        expected_rows = expected.frame[key].isin(EXACT_STATISTIC_ROWS)
+        checks.append(
+            compare_artifacts(
+                replace(actual, frame=actual.frame.loc[actual_rows if exact else ~actual_rows]),
+                replace(
+                    expected, frame=expected.frame.loc[expected_rows if exact else ~expected_rows]
+                ),
+                artifact=artifact,
+                policy=exact_policy if exact else policy,
+            )
+        )
+    strict, numeric = checks
+    mismatched = set(strict.mismatched_columns) | set(numeric.mismatched_columns)
+    return ArtifactComparison(
+        artifact=artifact,
+        passed=all(check.passed for check in checks),
+        reference_source=numeric.reference_source,
+        expected_rows=expected.row_count,
+        actual_rows=actual.row_count,
+        expected_columns=list(expected.columns),
+        actual_columns=list(actual.columns),
+        missing_keys=sorted({key for check in checks for key in check.missing_keys}),
+        extra_keys=sorted({key for check in checks for key in check.extra_keys}),
+        missing_columns=numeric.missing_columns,
+        extra_columns=numeric.extra_columns,
+        mismatched_columns=[name for name in expected.columns if name in mismatched],
+        exact_cells=sum(check.exact_cells for check in checks),
+        mismatched_cells=sum(check.mismatched_cells for check in checks),
+        missingness_mismatches=sum(check.missingness_mismatches for check in checks),
+        max_abs_error=numeric.max_abs_error,
+        mean_abs_error=numeric.mean_abs_error,
+    )
 
 
 def validate_program0_outputs(
@@ -117,8 +178,10 @@ def validate_program0_outputs(
         try:
             actual = load_artifact(output / filename, key=key)
             expected = load_artifact(paths.reference_sas7bdat[artifact], key=key)
-            results[filename] = compare_artifacts(
-                actual, expected, artifact=artifact, policy=policy
+            results[filename] = (
+                _compare_statistics(actual, expected, policy)
+                if artifact == "MEASURE_AVERAGE_STDDEV_2025JUL"
+                else compare_artifacts(actual, expected, artifact=artifact, policy=policy)
             )
         except (ArtifactLoadError, ComparisonInputError, ValueError) as error:
             malformed[filename] = str(error)
