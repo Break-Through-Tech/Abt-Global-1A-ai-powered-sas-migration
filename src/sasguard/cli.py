@@ -17,6 +17,7 @@ from sasguard.execution.runner import RunnerLimits
 from sasguard.program0 import translate_program0
 from sasguard.prototypes.local_model import run_local_model_smoke, run_local_model_suite
 from sasguard.prototypes.mortality import run_mortality_prototype
+from sasguard.reporting import write_run_report
 from sasguard.verification.integrity import load_and_verify_integrity
 
 app = typer.Typer(
@@ -204,6 +205,26 @@ def run_program0_candidate_command(
         typer.echo("Scope: Program 0 only. Full pipeline and CMS ratings are not verified.")
     if not result.ready_for_validation or (validate and result.validation_status != "passed"):
         raise typer.Exit(code=1)
+
+
+@app.command("report-run")
+def report_run(
+    run_directory: Annotated[Path, typer.Argument(help="Saved run directory inside reports/runs.")],
+    project_root: Annotated[Path, typer.Option(help="Repository root.")] = Path("."),
+    output_directory: Annotated[
+        Path | None,
+        typer.Option(help="New report directory inside reports/runs; never overwritten."),
+    ] = None,
+) -> None:
+    """Write an internal handoff draft and technical summary from recorded evidence."""
+    try:
+        destination = write_run_report(
+            project_root, run_directory, output_directory=output_directory
+        )
+    except (OSError, ValueError) as error:
+        typer.echo(f"Report could not be generated: {error}", err=True)
+        raise typer.Exit(code=2) from error
+    typer.echo(f"Internal draft generated: {destination}. Review scope and status before sharing.")
 
 
 @app.command("local-model-smoke")
