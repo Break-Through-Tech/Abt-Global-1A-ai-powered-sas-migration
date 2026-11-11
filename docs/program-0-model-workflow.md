@@ -68,6 +68,21 @@ and filenames with structural errors. It excludes provider IDs, raw reference va
 stdout, stderr, and exception text. Validator, hash, policy, and runner infrastructure
 failures stop the workflow rather than asking the model to repair them.
 
+New runs record `program0-aggregate-v2` in `workflow.json`. This version adds expected
+and actual row counts, missing key columns, expected schemas from SAS metadata, and
+the fixed comparison policies. Candidate column names outside the trusted schema are
+represented only by a count. No SAS row values or raw error messages enter the request.
+
+When one malformed file prevents the validator from retaining partial comparisons,
+the diagnostic step checks the other artifacts independently with the same comparator
+and policies. These supplemental checks explain failures; they never replace the
+recorded validator outcome. This lets a missing `_STAT_` column and copied-value
+precision errors appear in the same repair request.
+
+Saved feedback is reconstructed according to its recorded version. Older records
+without a version use the original aggregate format. Existing experiment files are
+never rewritten when the diagnostic builder changes.
+
 This differs from the earlier local repair experiment, which used human-curated
 diagnostics and explicit code hints. A passing earlier repair does not prove that this
 automatic feedback will produce a passing repair.
