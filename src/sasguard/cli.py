@@ -24,6 +24,7 @@ from sasguard.prototypes.program0_prompt import (
     check_program0_prompt,
     preview_program0_prompt,
 )
+from sasguard.prototypes.program01 import run_program01_chain
 from sasguard.reporting import write_run_report
 from sasguard.verification.integrity import load_and_verify_integrity
 
@@ -254,6 +255,32 @@ def model_program0_command(
             f"execution {attempt.execution_status}, SAS comparison {attempt.validation_status}."
         )
     typer.echo("Scope: Program 0 only. Full pipeline and CMS ratings are not verified.")
+    if result.status != "passed":
+        raise typer.Exit(code=1)
+
+
+@app.command("run-program01-chain")
+def program01_chain_command(
+    program0_directory: Annotated[
+        Path, typer.Argument(help="Verified Program 0 candidate or model-workflow directory.")
+    ],
+    image: Annotated[str, typer.Option(help="Existing isolated Docker runner image or image ID.")],
+    project_root: Annotated[Path, typer.Option(help="Repository root.")] = Path("."),
+) -> None:
+    """Run human-reference Program 1 on verified Python Program 0 output."""
+    try:
+        result, report = run_program01_chain(project_root, program0_directory, image=image)
+    except (OSError, ValueError) as error:
+        typer.echo(f"Program 0 to Program 1 chain could not start: {error}", err=True)
+        raise typer.Exit(code=2) from error
+    typer.echo(f"Program 0 to Program 1 chain: {result.status}. Evidence: {report}")
+    for name, comparison in result.comparisons.items():
+        copied = result.input_passthrough.get(name)
+        typer.echo(
+            f"{name}: SAS comparison {'passed' if comparison.passed else 'failed'}, "
+            f"input passthrough {'passed' if copied and copied.passed else 'failed'}."
+        )
+    typer.echo("Program 1 is human-reference Python. Full pipeline and ratings are not verified.")
     if result.status != "passed":
         raise typer.Exit(code=1)
 
