@@ -1,5 +1,6 @@
 """Command-line entry point for SASGuard."""
 
+import csv
 from pathlib import Path
 from typing import Annotated
 
@@ -17,6 +18,12 @@ from sasguard.execution.runner import RunnerLimits
 from sasguard.program0 import translate_program0
 from sasguard.prototypes.local_model import run_local_model_smoke, run_local_model_suite
 from sasguard.prototypes.mortality import run_mortality_prototype
+from sasguard.prototypes.program0_model import ModelSettings, run_program0_model
+from sasguard.prototypes.program0_prompt import (
+    PromptInputFormat,
+    check_program0_prompt,
+    preview_program0_prompt,
+)
 from sasguard.reporting import write_run_report
 from sasguard.verification.integrity import load_and_verify_integrity
 
@@ -207,6 +214,50 @@ def run_program0_candidate_command(
         raise typer.Exit(code=1)
 
 
+@app.command("model-program0")
+def model_program0_command(
+    preview_directory: Annotated[Path, typer.Argument(help="Reviewed Program 0 prompt preview.")],
+    image: Annotated[str, typer.Option(help="Existing isolated Docker runner image or image ID.")],
+    project_root: Annotated[Path, typer.Option(help="Repository root.")] = Path("."),
+    model: Annotated[
+        str, typer.Option(help="Exact model ID for the Responses API.")
+    ] = "gpt-6-luna",
+    repair_attempts: Annotated[
+        int, typer.Option(min=0, max=2, help="Maximum additional aggregate-guided repair calls.")
+    ] = 0,
+    max_output_tokens: Annotated[int, typer.Option(min=128, max=32768)] = 8192,
+    timeout_seconds: Annotated[
+        float, typer.Option(min=0.01, max=600, help="Timeout for each Docker execution.")
+    ] = 60,
+) -> None:
+    """Send the source/header payload, then generate, run, and validate Program 0.
+
+    Authorizes at most 1 + repair-attempts requests. The host reads SASGUARD_API_KEY.
+    """
+    try:
+        result, report = run_program0_model(
+            project_root,
+            preview_directory,
+            image=image,
+            settings=ModelSettings(
+                model=model, repair_attempts=repair_attempts, max_output_tokens=max_output_tokens
+            ),
+            limits=RunnerLimits(timeout_seconds=timeout_seconds),
+        )
+    except (OSError, ValueError) as error:
+        typer.echo(f"Program 0 model workflow could not start: {error}", err=True)
+        raise typer.Exit(code=2) from error
+    typer.echo(f"Program 0 model workflow: {result.status}. Evidence: {report}")
+    for attempt in result.attempts:
+        typer.echo(
+            f"Attempt {attempt.index}: generation {attempt.generation_status}, "
+            f"execution {attempt.execution_status}, SAS comparison {attempt.validation_status}."
+        )
+    typer.echo("Scope: Program 0 only. Full pipeline and CMS ratings are not verified.")
+    if result.status != "passed":
+        raise typer.Exit(code=1)
+
+
 @app.command("report-run")
 def report_run(
     run_directory: Annotated[Path, typer.Argument(help="Saved run directory inside reports/runs.")],
@@ -225,6 +276,54 @@ def report_run(
         typer.echo(f"Report could not be generated: {error}", err=True)
         raise typer.Exit(code=2) from error
     typer.echo(f"Internal draft generated: {destination}. Review scope and status before sharing.")
+
+
+@app.command("preview-program0-prompt")
+def preview_program0_prompt_command(
+    project_root: Annotated[Path, typer.Option(help="Repository root.")] = Path("."),
+    output_directory: Annotated[
+        Path | None, typer.Option(help="New direct child of reports/runs; never overwritten.")
+    ] = None,
+    input_format: Annotated[
+        PromptInputFormat,
+        typer.Option(help="Source input for execution; only its column names enter the prompt."),
+    ] = PromptInputFormat.CSV,
+) -> None:
+    """Prepare a local prompt preview without model calls, generation, or execution."""
+    try:
+        destination = preview_program0_prompt(
+            project_root, output_directory=output_directory, input_format=input_format
+        )
+    except (OSError, ValueError, csv.Error) as error:
+        typer.echo(f"Prompt preview could not be prepared: {error}", err=True)
+        raise typer.Exit(code=2) from error
+    typer.echo(f"Local prompt preview: {destination}")
+    typer.echo(f"Input source: {input_format.value}.")
+    typer.echo("Payload approval and model selection are pending. No model call was made.")
+
+
+@app.command("check-program0-prompt")
+def check_program0_prompt_command(
+    preview_directory: Annotated[
+        Path, typer.Argument(help="Saved local prompt preview directory.")
+    ],
+    project_root: Annotated[Path, typer.Option(help="Repository root.")] = Path("."),
+) -> None:
+    """Check a saved preview without modifying it, approving it, or calling a model."""
+    try:
+        result = check_program0_prompt(project_root, preview_directory)
+    except (OSError, ValueError, csv.Error) as error:
+        typer.echo(f"Prompt preview could not be checked: {error}", err=True)
+        raise typer.Exit(code=2) from error
+    typer.echo(
+        f"Prompt preview integrity: {result.status}. Messages SHA-256: {result.messages_sha256}"
+    )
+    typer.echo("Payload approval remains pending. No model call was made.")
+    typer.echo(f"Recorded input source: {result.input_format.value}.")
+    for issue in result.issues:
+        typer.echo(issue)
+    if result.status != "matched":
+        raise typer.Exit(code=1)
 
 
 @app.command("local-model-smoke")
