@@ -49,6 +49,17 @@ The `tests/test_fastclus.py` file contains 16 passing test cases covering:
 
 These tests verify reference rules, source configuration, and illustrative statistical behavior. They do not establish numerical parity between SAS FASTCLUS and a Python clustering implementation.
 
+**Combined Test Results**
+
+The combined Program 2 verification suite passed all 40 tests across the following files:
+
+- `tests/test_program2_eligibility.py`
+- `tests/test_program2_weights.py`
+- `tests/test_artifacts.py`
+- `tests/test_fastclus.py`
+
+These tests cover eligibility boundaries, domain-weight redistribution, reference artifact counts, and FASTCLUS reference behavior.
+
 ## Unresolved Questions
 
 - Whether Python percentile calculations match the exact SAS `PROC UNIVARIATE` percentile definition, including ties and small datasets.
