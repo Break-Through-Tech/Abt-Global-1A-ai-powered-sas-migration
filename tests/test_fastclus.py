@@ -1,4 +1,9 @@
+import re
+from pathlib import Path
+from statistics import mean, median
+
 import pytest
+
 
 # percentile boundry check
 def assign_quintile(score, p20, p40, p60, p80):
@@ -14,6 +19,7 @@ def assign_quintile(score, p20, p40, p60, p80):
     if score <= p80:
         return 4
     return 5
+
 
 @pytest.mark.parametrize(
     "score, expected_group",
@@ -32,7 +38,6 @@ def test_quintile_group_boundaries(score, expected_group):
 
 
 # test the median initilization with how SAS chose 5 star median
-from statistics import median
 
 
 def calculate_group_medians(grouped_scores):
@@ -81,8 +86,7 @@ def test_median_initilization_even_count():
 
 
 # ensure consistency
-import re
-from pathlib import Path
+
 
 SAS_MACRO = (
     Path(__file__).resolve().parents[1] / "data" / "Project_1" / "SAS Programs" / "Star_Macros.sas"
@@ -209,11 +213,8 @@ def test_star_mapping_independent_of_cluster_id():
 
 # check the outlier investigation
 
+
 # Outlier investigation: synthetic reference probes
-
-from statistics import mean
-
-
 def test_outlier_effect_on_mean():
     """Show how an extreme value can shift a mean."""
     normal_scores = [0.10, 0.15, 0.20, 0.25, 0.30]
