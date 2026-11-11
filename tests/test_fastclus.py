@@ -2,13 +2,15 @@ import re
 from pathlib import Path
 from statistics import mean, median
 
+import pandas as pd
 import pytest
 
 
 # percentile boundry check
 def assign_quintile(score, p20, p40, p60, p80):
     """Reference the interval rules in the SAS %kmeans macro."""
-    if score is None:
+    # SAS leaves missing summary scores outside every percentile interval.
+    if pd.isna(score):
         return None
     if score <= p20:
         return 1
@@ -24,6 +26,7 @@ def assign_quintile(score, p20, p40, p60, p80):
 @pytest.mark.parametrize(
     "score, expected_group",
     [
+        (0, 1),  # A zero score is present, not missing.
         (10, 1),
         (20, 1),  # Exactly P20
         (30, 2),
@@ -35,6 +38,11 @@ def assign_quintile(score, p20, p40, p60, p80):
 )
 def test_quintile_group_boundaries(score, expected_group):
     assert assign_quintile(score, p20=20, p40=40, p60=60, p80=80) == expected_group
+
+
+@pytest.mark.parametrize("score", [None, float("nan"), pd.NA], ids=["none", "nan", "pandas-na"])
+def test_missing_score_has_no_quintile(score):
+    assert assign_quintile(score, p20=20, p40=40, p60=60, p80=80) is None
 
 
 # test the median initilization with how SAS chose 5 star median

@@ -38,9 +38,10 @@ The source also applies `ABS(cluster)` before merging cluster assignments with s
 
 ## Python Reference Probes
 
-The `tests/test_fastclus.py` file contains 16 passing test cases covering:
+The `tests/test_fastclus.py` file contains 20 passing test cases covering:
 
-- Seven percentile-boundary assignments
+- Eight percentile-boundary assignments, including a valid zero score
+- Three missing-score cases: `None`, numeric `NaN`, and pandas `NA`; all remain unassigned
 - Two median-initialization cases (odd and even counts)
 - First-pass FASTCLUS configuration
 - Second-pass configuration and seed reuse
@@ -51,7 +52,7 @@ These tests verify reference rules, source configuration, and illustrative stati
 
 **Combined Test Results**
 
-The combined Program 2 verification suite passed all 40 tests across the following files:
+The combined Program 2 verification suite passed all 44 tests across the following files:
 
 - `tests/test_program2_eligibility.py`
 - `tests/test_program2_weights.py`
