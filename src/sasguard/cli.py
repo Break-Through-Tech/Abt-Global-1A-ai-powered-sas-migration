@@ -25,6 +25,7 @@ from sasguard.prototypes.program0_prompt import (
     preview_program0_prompt,
 )
 from sasguard.prototypes.program01 import run_program01_chain
+from sasguard.prototypes.program2_model import run_program2_model
 from sasguard.reporting import write_run_report
 from sasguard.verification.integrity import load_and_verify_integrity
 
@@ -281,6 +282,45 @@ def program01_chain_command(
             f"input passthrough {'passed' if copied and copied.passed else 'failed'}."
         )
     typer.echo("Program 1 is human-reference Python. Full pipeline and ratings are not verified.")
+    if result.status != "passed":
+        raise typer.Exit(code=1)
+
+
+@app.command("model-program2")
+def model_program2_command(
+    image: Annotated[str, typer.Option(help="Exact isolated Docker image ID or existing tag.")],
+    upstream_chain: Annotated[
+        Path | None, typer.Option(help="Verified Program 0 to Program 1 chain directory.")
+    ] = None,
+    reference_inputs: Annotated[
+        bool, typer.Option("--reference-inputs", help="Explicitly use supplied SAS intermediates.")
+    ] = False,
+    project_root: Annotated[Path, typer.Option(help="Repository root.")] = Path("."),
+    repair_attempts: Annotated[int, typer.Option(min=0, max=2)] = 2,
+) -> None:
+    """Translate Program 2 with bounded Luna attempts and fixed host SAS verification."""
+    if (upstream_chain is None) == (not reference_inputs):
+        typer.echo("Select exactly one of --upstream-chain or --reference-inputs.", err=True)
+        raise typer.Exit(code=2)
+    try:
+        result, path = run_program2_model(
+            project_root,
+            upstream_chain=upstream_chain,
+            image=image,
+            settings=ModelSettings(
+                max_output_tokens=16384, repair_attempts=repair_attempts, api_timeout_seconds=300
+            ),
+        )
+    except (OSError, ValueError) as error:
+        typer.echo(f"Program 2 could not start: {error}", err=True)
+        raise typer.Exit(code=2) from error
+    typer.echo(f"Program 2 model workflow: {result.status}. Evidence: {path}")
+    for attempt in result.attempts:
+        typer.echo(
+            f"Attempt {attempt.index}: generation {attempt.generation_status}, "
+            f"execution {attempt.execution_status}, SAS comparison {attempt.validation_status}."
+        )
+    typer.echo("Scope: July 2025 Program 2. Program 1 uses a human/SAS reference.")
     if result.status != "passed":
         raise typer.Exit(code=1)
 
