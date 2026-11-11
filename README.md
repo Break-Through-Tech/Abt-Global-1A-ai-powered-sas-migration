@@ -132,6 +132,9 @@ CSV outputs, see [Program 0 candidate execution](docs/program-0-candidate-execut
 To inspect the proposed Program 0 model payload without calling a model, see
 [Program 0 prompt preview](docs/program-0-prompt-preview.md). Payload approval remains separate.
 
+To generate and validate Program 0 with recorded model attempts and optional bounded repair,
+see [Program 0 model workflow](docs/program-0-model-workflow.md).
+
 For a local model experiment with synthetic SAS, see
 [Test a local model](docs/local-model-smoke.md). It uses native Ollama for generation,
 the isolated Docker runner for execution, and a deterministic check on the host.

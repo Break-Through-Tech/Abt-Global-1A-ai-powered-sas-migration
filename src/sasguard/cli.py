@@ -18,6 +18,7 @@ from sasguard.execution.runner import RunnerLimits
 from sasguard.program0 import translate_program0
 from sasguard.prototypes.local_model import run_local_model_smoke, run_local_model_suite
 from sasguard.prototypes.mortality import run_mortality_prototype
+from sasguard.prototypes.program0_model import ModelSettings, run_program0_model
 from sasguard.prototypes.program0_prompt import (
     PromptInputFormat,
     check_program0_prompt,
@@ -210,6 +211,50 @@ def run_program0_candidate_command(
     if validate:
         typer.echo("Scope: Program 0 only. Full pipeline and CMS ratings are not verified.")
     if not result.ready_for_validation or (validate and result.validation_status != "passed"):
+        raise typer.Exit(code=1)
+
+
+@app.command("model-program0")
+def model_program0_command(
+    preview_directory: Annotated[Path, typer.Argument(help="Reviewed Program 0 prompt preview.")],
+    image: Annotated[str, typer.Option(help="Existing isolated Docker runner image or image ID.")],
+    project_root: Annotated[Path, typer.Option(help="Repository root.")] = Path("."),
+    model: Annotated[
+        str, typer.Option(help="Exact model ID for the Responses API.")
+    ] = "gpt-6-luna",
+    repair_attempts: Annotated[
+        int, typer.Option(min=0, max=2, help="Maximum additional aggregate-guided repair calls.")
+    ] = 0,
+    max_output_tokens: Annotated[int, typer.Option(min=128, max=32768)] = 8192,
+    timeout_seconds: Annotated[
+        float, typer.Option(min=0.01, max=600, help="Timeout for each Docker execution.")
+    ] = 60,
+) -> None:
+    """Send the source/header payload, then generate, run, and validate Program 0.
+
+    Authorizes at most 1 + repair-attempts requests. The host reads SASGUARD_API_KEY.
+    """
+    try:
+        result, report = run_program0_model(
+            project_root,
+            preview_directory,
+            image=image,
+            settings=ModelSettings(
+                model=model, repair_attempts=repair_attempts, max_output_tokens=max_output_tokens
+            ),
+            limits=RunnerLimits(timeout_seconds=timeout_seconds),
+        )
+    except (OSError, ValueError) as error:
+        typer.echo(f"Program 0 model workflow could not start: {error}", err=True)
+        raise typer.Exit(code=2) from error
+    typer.echo(f"Program 0 model workflow: {result.status}. Evidence: {report}")
+    for attempt in result.attempts:
+        typer.echo(
+            f"Attempt {attempt.index}: generation {attempt.generation_status}, "
+            f"execution {attempt.execution_status}, SAS comparison {attempt.validation_status}."
+        )
+    typer.echo("Scope: Program 0 only. Full pipeline and CMS ratings are not verified.")
+    if result.status != "passed":
         raise typer.Exit(code=1)
 
 
