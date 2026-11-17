@@ -1,5 +1,8 @@
 # Program 2 model experiment
 
+See the [July 2025 STRICT replay](experiments/2026-11-16-program2-strict-replay.md)
+for the separate manual correction and full-chain comparison.
+
 `model-program2` generates standalone Python for the supplied Program 2 SAS, executes
 it in isolated Docker, and compares the hospital star file and national averages with
 the supplied SAS binary targets. The model cannot decide whether its translation passed.
