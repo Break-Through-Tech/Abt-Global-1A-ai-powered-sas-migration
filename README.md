@@ -138,6 +138,9 @@ see [Program 0 model workflow](docs/program-0-model-workflow.md).
 To feed verified Python Program 0 output into the human Program 1 reference and check
 all five domains, see [Program 0 to Program 1 chain](docs/program-0-to-1-chain.md).
 
+For bounded Program 2 model translation and comparison of stars and national averages,
+see [Program 2 model workflow](docs/program-2-model-workflow.md).
+
 For a local model experiment with synthetic SAS, see
 [Test a local model](docs/local-model-smoke.md). It uses native Ollama for generation,
 the isolated Docker runner for execution, and a deterministic check on the host.
