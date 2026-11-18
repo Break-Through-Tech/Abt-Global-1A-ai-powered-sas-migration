@@ -135,6 +135,9 @@ To inspect the proposed Program 0 model payload without calling a model, see
 To generate and validate Program 0 with recorded model attempts and optional bounded repair,
 see [Program 0 model workflow](docs/program-0-model-workflow.md).
 
+To feed verified Python Program 0 output into the human Program 1 reference and check
+all five domains, see [Program 0 to Program 1 chain](docs/program-0-to-1-chain.md).
+
 For a local model experiment with synthetic SAS, see
 [Test a local model](docs/local-model-smoke.md). It uses native Ollama for generation,
 the isolated Docker runner for execution, and a deterministic check on the host.
