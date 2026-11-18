@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import shutil
+from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
@@ -14,14 +15,17 @@ from sasguard.execution.program0 import (
     validate_collected_program0,
 )
 from sasguard.execution.runner import DockerExecutionRunner, RunnerLimits
-from sasguard.prototypes.program01 import DOMAINS, run_program01_chain
+from sasguard.prototypes.program01 import run_program01_chain
 from sasguard.prototypes.program2_model import _verified_chain_sources
 from sasguard.provenance.hashing import sha256_file
+from sasguard.reporting.july_2025 import ReplayStage, rating_totals, write_replay_reports
+from sasguard.reporting.models import ScopeStatus
 from sasguard.reporting.reader import report_runs_directory, safe_file
 from sasguard.verification.integrity import load_and_verify_integrity
 from sasguard.verification.program2 import (
     ARTIFACTS,
     POLICY_PATH,
+    Program2Validation,
     check_domain_passthrough,
     validate_program2,
 )
@@ -57,7 +61,8 @@ def replay(root: Path, program0: Path, program2: Path, image: str) -> int:
     for candidate, expected in ((program0, PROGRAM0_SHA256), (program2, PROGRAM2_SHA256)):
         if candidate.is_symlink() or sha256_file(candidate, normalize_text=False) != expected:
             raise ValueError("candidate bytes differ from the recorded November 10 experiment")
-    if not load_and_verify_integrity(root, integrity).passed:
+    protected = load_and_verify_integrity(root, integrity)
+    if not protected.passed:
         raise ValueError("protected artifact integrity failed")
     if sha256_file(root / POLICY_PATH) != PROGRAM2_POLICY_SHA256:
         raise ValueError("Program 2 comparison policy differs from the recorded baseline")
@@ -66,6 +71,61 @@ def replay(root: Path, program0: Path, program2: Path, image: str) -> int:
         if corrected.count(original) != 1:
             raise ValueError("unexpected correction site in Program 2 candidate")
         corrected = corrected.replace(original, replacement, 1)
+
+    run = report_runs_directory(root) / f"program2-strict-replay-{uuid4()}"
+    run.mkdir(parents=True)
+    run_date = datetime.now(UTC).date().isoformat()
+    stages: list[ReplayStage] = []
+    summary: dict[str, object] = {
+        "scope": "CMS July 2025, ten supplied SAS artifact comparisons",
+        "run_date_utc": run_date,
+        "program0_code_origin": "saved_model_candidate_after_automatic_repair",
+        "program0_candidate_sha256": PROGRAM0_SHA256,
+        "program1_code_origin": "human_reference",
+        "program2_code_origin": "saved_model_candidate_with_manual_strict_correction",
+        "original_program2_sha256": PROGRAM2_SHA256,
+        "program2_comparison_policy_sha256": PROGRAM2_POLICY_SHA256,
+        "program0_report": None,
+        "program1_report": None,
+        "program2_report": None,
+    }
+
+    def finish(verdict: str, totals: tuple[int, int, dict[int, int]] | None = None) -> int:
+        integrity_result = load_and_verify_integrity(root, integrity)
+        if not integrity_result.passed:
+            verdict = "integrity_failed"
+        status = {
+            "passed": ScopeStatus.VERIFIED,
+            "failed": ScopeStatus.FAILED,
+            "integrity_failed": ScopeStatus.NOT_VERIFIED,
+        }[verdict]
+        summary.update(
+            status=verdict,
+            scope_status=status.value,
+            protected_files_checked=integrity_result.checked_files,
+            protected_files_intact=integrity_result.passed,
+            human_review="not_recorded",
+            artifact_comparisons_passed=sum(
+                item.passed for stage in stages for item in stage.comparisons.values()
+            ),
+        )
+        if status is ScopeStatus.VERIFIED and totals is not None:
+            processed, eligible, ratings = totals
+            summary.update(hospitals_processed=processed, hospitals_eligible=eligible)
+            summary["star_distribution"] = ratings
+        write_replay_reports(
+            run,
+            run_date=run_date,
+            status=status,
+            stages=stages,
+            protected_files_checked=integrity_result.checked_files,
+            integrity_passed=integrity_result.passed,
+            totals=totals,
+        )
+        summary_path = run / "summary.json"
+        summary_path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
+        print(f"July 2025 replay: {verdict}. {summary_path}")
+        return 0 if verdict == "passed" else 1
 
     limits = RunnerLimits(timeout_seconds=120)
     program0_result, program0_report = run_program0_candidate(
@@ -76,21 +136,32 @@ def replay(root: Path, program0: Path, program2: Path, image: str) -> int:
         input_format=CandidateInputFormat.SAS7BDAT,
         validator=validate_collected_program0,
     )
+    stages.append(
+        ReplayStage(
+            program0_result.execution_result,
+            program0_result.validation_status,
+            program0_result.validation_results,
+        )
+    )
+    summary["program0_report"] = program0_report.relative_to(root).as_posix()
     print(f"Program 0: {program0_result.validation_status}. {program0_report}")
     if program0_result.validation_status != "passed":
-        return 1
+        if program0_result.status.value == "integrity_failed":
+            return finish("integrity_failed")
+        return finish("failed")
     staged_program0 = safe_file(program0_report.parent, "source/main.py")
     if sha256_file(staged_program0, normalize_text=False) != PROGRAM0_SHA256:
         raise ValueError("Program 0 replay staged different candidate bytes")
     chain, chain_path = run_program01_chain(
         root, program0_report.parent, image=image, limits=limits
     )
+    stages.append(ReplayStage(chain.execution_result, chain.status, chain.comparisons))
+    summary["program1_report"] = chain_path.relative_to(root).as_posix()
     print(f"Program 1: {chain.status}. {chain_path}")
     if chain.status != "passed":
-        return 1
+        return finish("integrity_failed" if chain.status == "integrity_failed" else "failed")
 
     sources = _verified_chain_sources(root, chain_path.parent)
-    run = report_runs_directory(root) / f"program2-strict-replay-{uuid4()}"
     source, inputs, output = (run / name for name in ("source", "input", "output"))
     source.mkdir(parents=True)
     inputs.mkdir()
@@ -111,7 +182,7 @@ def replay(root: Path, program0: Path, program2: Path, image: str) -> int:
     )
     (run / "execution.json").write_text(execution.to_json(), encoding="utf-8")
     verdict = "failed"
-    passed_outputs = 0
+    validation: Program2Validation | None = None
     if execution.passed and set(execution.output_files) == set(ARTIFACTS):
         validation = validate_program2(root, output)
         try:
@@ -123,9 +194,24 @@ def replay(root: Path, program0: Path, program2: Path, image: str) -> int:
             if validation.status == "passed" and not validation.input_passthrough.passed:
                 validation.status = "failed"
         (run / "validation.json").write_text(validation.model_dump_json(indent=2), encoding="utf-8")
-        passed_outputs = sum(item.passed for item in validation.comparisons.values())
         if validation.status == "passed":
             verdict = "passed"
+    stages.append(
+        ReplayStage(
+            execution,
+            validation.status
+            if validation is not None
+            else ("missing or unexpected outputs" if execution.passed else "not run"),
+            validation.comparisons if validation is not None else {},
+        )
+    )
+    summary.update(
+        corrected_program2_sha256=corrected_hash,
+        program2_input_sha256=input_hashes,
+        program2_execution=execution.status.value,
+        program2_report="validation.json" if validation is not None else None,
+        program2_output_sha256=validation.output_hashes if validation is not None else {},
+    )
     evidence_intact = (
         sha256_file(corrected_path, normalize_text=False) == corrected_hash
         and sha256_file(root / POLICY_PATH) == PROGRAM2_POLICY_SHA256
@@ -134,32 +220,20 @@ def replay(root: Path, program0: Path, program2: Path, image: str) -> int:
             sha256_file(inputs / name, normalize_text=False) == expected
             for name, expected in input_hashes.items()
         )
-        and load_and_verify_integrity(root, integrity).passed
     )
     if not evidence_intact:
         verdict = "integrity_failed"
-    summary = {
-        "scope": "CMS July 2025, ten supplied SAS artifact comparisons",
-        "program0_code_origin": "saved_model_candidate_after_automatic_repair",
-        "program0_candidate_sha256": PROGRAM0_SHA256,
-        "program0_report": program0_report.relative_to(root).as_posix(),
-        "program1_code_origin": "human_reference",
-        "program1_report": chain_path.relative_to(root).as_posix(),
-        "program2_code_origin": "saved_model_candidate_with_manual_strict_correction",
-        "original_program2_sha256": PROGRAM2_SHA256,
-        "corrected_program2_sha256": corrected_hash,
-        "program2_input_sha256": input_hashes,
-        "program2_comparison_policy_sha256": PROGRAM2_POLICY_SHA256,
-        "program2_execution": execution.status.value,
-        "program2_report": "validation.json" if (run / "validation.json").exists() else None,
-        "artifact_comparisons_passed": len(program0_result.validation_results)
-        + len(DOMAINS)
-        + passed_outputs,
-        "status": verdict,
-    }
-    (run / "summary.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
-    print(f"July 2025 replay: {verdict}. {run / 'summary.json'}")
-    return 0 if verdict == "passed" else 1
+    totals = None
+    if verdict == "passed" and validation is not None:
+        try:
+            for name in ARTIFACTS:
+                output_path = safe_file(run, f"output/{name}")
+                if sha256_file(output_path, normalize_text=False) != validation.output_hashes[name]:
+                    raise ValueError("Program 2 output changed after validation")
+            totals = rating_totals(run, validation.output_hashes["star_2025jul.csv"])
+        except (OSError, ValueError, KeyError):
+            verdict = "integrity_failed"
+    return finish(verdict, totals)
 
 
 def main() -> int:

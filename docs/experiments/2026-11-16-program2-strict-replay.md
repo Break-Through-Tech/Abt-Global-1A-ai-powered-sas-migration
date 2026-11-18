@@ -51,6 +51,11 @@ The command writes fresh records under `reports/runs/`. The `summary.json` in th
 records the Program 2 source, input and policy hashes. Keep the saved source artifacts
 locally to reproduce the replay.
 
+The replay also writes `abt-validation.md` and `cms-summary.md` beside the summary.
+The Abt draft shows the Docker and validation results for each stage. The CMS draft
+includes aggregate rating counts only after all ten comparisons and the integrity
+checks pass. Review both drafts before sharing them outside Abt.
+
 This result covers the supplied July 2025 release and a manually corrected hybrid
 chain. The original source-only baseline retains its FAILED verdict. The narrow replay
 still uses the original percentile formula and leaves broader FASTCLUS seed selection,
