@@ -323,6 +323,23 @@ def _csv_columns(path: Path) -> list[str]:
     return columns
 
 
+def program0_runtime_contract(input_columns: list[str]) -> dict[str, object]:
+    """Build the same input-derived contract for candidate staging and prompt previews."""
+    return {
+        "schema_version": 1,
+        "input_filename": Path(INPUT_PATH).name,
+        "input_columns": list(input_columns),
+        "identifier_column": "PROVIDER_ID",
+        "identifier_type": "text; preserve leading zeros and literal NA and NULL",
+        "numeric_missing_value": "empty CSV field",
+        "output_filenames": list(OUTPUT_FILENAMES),
+        "environment": {
+            "SASGUARD_INPUT_DIR": "/runner/input",
+            "SASGUARD_OUTPUT_DIR": "/runner/output",
+        },
+    }
+
+
 def collect_program0_outputs(output_directory: Path) -> CandidateReport:
     """Collect only regular, well-formed CSVs; leave SAS schema and values to #44.
 
@@ -449,19 +466,7 @@ def run_program0_candidate(
         )
         if sha256_file(input_path) != original_input_hash:
             raise ValueError("source input changed during SAS-to-CSV staging")
-    contract = {
-        "schema_version": 1,
-        "input_filename": staged_input.name,
-        "input_columns": _csv_columns(staged_input),
-        "identifier_column": "PROVIDER_ID",
-        "identifier_type": "text; preserve leading zeros and literal NA and NULL",
-        "numeric_missing_value": "empty CSV field",
-        "output_filenames": list(OUTPUT_FILENAMES),
-        "environment": {
-            "SASGUARD_INPUT_DIR": "/runner/input",
-            "SASGUARD_OUTPUT_DIR": "/runner/output",
-        },
-    }
+    contract = program0_runtime_contract(_csv_columns(staged_input))
     _write_json(inputs / "contract.json", contract)
     manifest = RunManifest.create(
         source_hashes=hash_files(root, [PROGRAM_PATH]),
