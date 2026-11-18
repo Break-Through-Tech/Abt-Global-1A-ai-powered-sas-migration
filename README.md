@@ -31,7 +31,7 @@ execution, artifact comparison, and pass or fail decisions.
 
 ## Current status
 
-The project is in the Data Exploration and Setup milestone. Current work focuses on:
+The setup milestone established:
 
 - a reproducible Docker and VS Code development environment;
 - a maintainable Python package and automated quality checks;
@@ -40,7 +40,7 @@ The project is in the Data Exploration and Setup milestone. Current work focuses
 - implementing trusted data loading and initial comparison utilities;
 - protecting supplied artifacts and recording reproducible run metadata.
 
-No end-to-end parity result is claimed at this stage.
+Current work is the first translation sprint. The [Program 0 Python translation](docs/program-0-python.md) matches the three supplied July 2025 SAS outputs within a documented numeric tolerance. It is a human-written baseline, not a general SAS translator or a full-pipeline parity result.
 
 A bounded human-reference prototype reproduces the Program 1 Mortality
 `grp_score` calculation on the supplied Program 0 standardized SAS binary. Its
