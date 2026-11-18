@@ -129,6 +129,15 @@ Python environments, and troubleshooting.
 To run a standalone generated Program 0 candidate in the isolated runner and collect its three
 CSV outputs, see [Program 0 candidate execution](docs/program-0-candidate-execution.md).
 
+To inspect the proposed Program 0 model payload without calling a model, see
+[Program 0 prompt preview](docs/program-0-prompt-preview.md). Payload approval remains separate.
+
+To generate and validate Program 0 with recorded model attempts and optional bounded repair,
+see [Program 0 model workflow](docs/program-0-model-workflow.md).
+
+To feed verified Python Program 0 output into the human Program 1 reference and check
+all five domains, see [Program 0 to Program 1 chain](docs/program-0-to-1-chain.md).
+
 For a local model experiment with synthetic SAS, see
 [Test a local model](docs/local-model-smoke.md). It uses native Ollama for generation,
 the isolated Docker runner for execution, and a deterministic check on the host.
@@ -166,6 +175,11 @@ observed failures in the checked graph. It does not infer SAS statement-level ca
 Generated Python runs in a separate network-disabled Docker service that cannot access trusted SAS
 outputs. See [Isolated generated-code runner](docs/isolated-runner.md) for its access boundary,
 PowerShell and zsh commands, machine-readable results, and limitations.
+
+Existing Program 0, Mortality, and individual synthetic run records can be summarized as internal
+handoff and technical drafts. See [Scoped run reports](docs/scoped-run-reports.md) for the
+command, supported layouts, privacy limits, and the distinction between scoped verification
+and a complete CMS result.
 
 ## License
 
