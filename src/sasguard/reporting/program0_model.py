@@ -13,7 +13,7 @@ from sasguard.prototypes.program0_model import (
     _repair_messages,
     _request,
     _Response,
-    aggregate_diagnostics,
+    repair_diagnostics,
 )
 from sasguard.provenance.hashing import normalize_relative_path, sha256_file
 from sasguard.reporting.models import RunReport
@@ -85,7 +85,11 @@ def read_program0_model_report(root: Path, run: Path) -> RunReport:
                 previous_report = CandidateReport.model_validate_json(
                     previous_execution.read_bytes()
                 )
-                diagnostics = _json_bytes(aggregate_diagnostics(previous_report))
+                diagnostics = _json_bytes(
+                    repair_diagnostics(
+                        root, previous_report, previous_execution, workflow.diagnostic_version
+                    )
+                )
                 if diagnostic_file.read_bytes() != diagnostics:
                     raise ValueError("repair feedback differs from automatic aggregates")
                 messages.extend(_repair_messages(code, diagnostics))

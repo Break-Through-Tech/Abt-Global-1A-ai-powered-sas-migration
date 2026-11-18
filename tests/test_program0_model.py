@@ -33,6 +33,7 @@ def model_project(project: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path,
         "src/sasguard/execution/program0.py",
         "src/sasguard/prototypes/program0_prompt.py",
         "src/sasguard/prototypes/program0_model.py",
+        "src/sasguard/prototypes/program0_feedback.py",
         "src/sasguard/prototypes/local_model.py",
     ):
         target = project / relative
@@ -40,6 +41,13 @@ def model_project(project: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path,
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(REPO / relative, target)
     monkeypatch.setenv("SASGUARD_API_KEY", KEY)
+    # Detailed schemas and real comparator behavior are covered independently and
+    # in Docker tests. This fixture exercises API/controller failures with fake gold.
+    monkeypatch.setattr(
+        controller,
+        "structural_feedback",
+        lambda *args: {"diagnostic_version": "program0-aggregate-v2"},
+    )
     preview = preview_program0_prompt(project)
     return project, preview
 
