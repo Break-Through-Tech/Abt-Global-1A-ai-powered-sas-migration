@@ -96,6 +96,32 @@ def test_numeric_sas_identifier_is_rejected(
         load_artifact(source, key="PROVIDER_ID")
 
 
+def test_sas_empty_text_loads_as_missing_without_changing_other_text(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "text.sas7bdat"
+    source.write_bytes(b"synthetic test placeholder")
+
+    def fake_sas_reader(_path: Path) -> tuple[pd.DataFrame, object]:
+        return pd.DataFrame(
+            {
+                "PROVIDER_ID": ["00001", "00002", "00003"],
+                "CNT_GRP": ["", "NA", None],
+                "SCORE": [1.0, float("nan"), 3.0],
+            }
+        ), object()
+
+    monkeypatch.setattr("sasguard.data.loading.pyreadstat.read_sas7bdat", fake_sas_reader)
+
+    artifact = load_artifact(source, key="PROVIDER_ID")
+
+    assert artifact.frame["PROVIDER_ID"].tolist() == ["00001", "00002", "00003"]
+    assert pd.isna(artifact.frame.loc[0, "CNT_GRP"])
+    assert artifact.frame.loc[1, "CNT_GRP"] == "NA"
+    assert pd.isna(artifact.frame.loc[2, "CNT_GRP"])
+    assert pd.isna(artifact.frame.loc[1, "SCORE"])
+
+
 def test_missing_and_unsupported_files_are_rejected(tmp_path: Path) -> None:
     with pytest.raises(FileNotFoundError, match="artifact file does not exist"):
         load_artifact(tmp_path / "missing.csv", key="PROVIDER_ID")

@@ -12,6 +12,7 @@ artifacts. Loading does not compare values and never writes to the source file.
 - Leading zeros in CSV identifiers remain significant.
 - A missing identifier remains missing instead of becoming the text `"nan"` or `"<NA>"`.
 - Numeric missing values remain missing and are never replaced with zero.
+- Empty SAS character values load as missing, matching empty CSV fields. Nonempty text is not stripped.
 - Missing and ambiguous key columns produce explicit errors.
 - Case-insensitive collisions anywhere in the schema produce explicit errors.
 - With no explicit key, reference summary tables without provider IDs can load. When a

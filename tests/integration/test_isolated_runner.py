@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from sasguard import compatibility
 from sasguard.execution.result import ExecutionStatus
 from sasguard.execution.runner import DockerExecutionRunner, RunnerLimits
 
@@ -28,7 +29,7 @@ def docker_required() -> None:
 @pytest.fixture
 def runner() -> DockerExecutionRunner:
     return DockerExecutionRunner(
-        image="sasguard-runner:test",
+        image=os.environ.get("SASGUARD_TEST_RUNNER_IMAGE", "sasguard-runner:test"),
         limits=RunnerLimits(timeout_seconds=2, memory="256m", cpus=0.5, pids=32),
     )
 
@@ -41,6 +42,45 @@ def directories(tmp_path: Path) -> tuple[Path, Path, Path, Path]:
     for path in (source, input_directory, output, golden):
         path.mkdir()
     return source, input_directory, output, golden
+
+
+def test_staged_sas_helpers_run_in_existing_image(tmp_path: Path) -> None:
+    source, inputs, output, golden = directories(tmp_path)
+    (source / "sas_helpers.py").write_bytes(Path(compatibility.__file__).read_bytes())
+    (inputs / "input.csv").write_text(
+        "PROVIDER_ID,X,Y\nNA,,\nNULL,,0\n0008,-2,3\n", encoding="utf-8"
+    )
+    (source / "main.py").write_text(
+        """import os
+import importlib.util
+from pathlib import Path
+from sas_helpers import read_sas_csv, sas_lt, sas_sum
+
+assert importlib.util.find_spec('sasguard.prototypes') is None
+assert importlib.util.find_spec('sasguard.compatibility') is None
+frame = read_sas_csv(Path(os.environ['SASGUARD_INPUT_DIR']) / 'input.csv')
+string_frame = read_sas_csv(str(Path(os.environ['SASGUARD_INPUT_DIR']) / 'input.csv'))
+assert string_frame.equals(frame)
+frame['FLAG'] = sas_lt(frame['X'], 0).astype(int)
+frame['TOTAL'] = sas_sum(frame[['X', 'Y']])
+frame.to_csv(Path(os.environ['SASGUARD_OUTPUT_DIR']) / 'adjusted.csv', index=False)
+""",
+        encoding="utf-8",
+    )
+    result = DockerExecutionRunner(
+        image=os.environ.get("SASGUARD_TEST_RUNNER_IMAGE", "sasguard-runner:test")
+    ).run(
+        source_directory=source,
+        input_directory=inputs,
+        output_directory=output,
+        forbidden_host_paths=(golden,),
+    )
+    assert result.passed, result.stderr
+    assert result.output_files == ["adjusted.csv"]
+    text = (output / "adjusted.csv").read_text()
+    assert "NA,,,1," in text
+    assert "NULL,,0.0,1,0.0" in text
+    assert "0008,-2.0,3.0,1,1.0" in text
 
 
 def test_success_has_no_network_gold_or_host_write_access(
@@ -141,7 +181,7 @@ def test_timeout_terminates_and_is_reported(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     runner = DockerExecutionRunner(
-        image="sasguard-runner:test",
+        image=os.environ.get("SASGUARD_TEST_RUNNER_IMAGE", "sasguard-runner:test"),
         limits=RunnerLimits(timeout_seconds=0.25, memory="256m", cpus=0.5, pids=32),
     )
 
