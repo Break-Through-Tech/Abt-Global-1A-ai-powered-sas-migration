@@ -58,3 +58,23 @@ def run_human_program1(
     output_directory.mkdir(parents=True, exist_ok=True)
     for name, table in namespace["calculate_all_domains"](frame).items():
         table.to_csv(output_directory / f"{name.lower()}.csv", index=False, float_format="%.17g")
+
+
+PROGRAM2_REFERENCE = "reference_python/program2.py"
+
+
+def run_human_program2(
+    project_root: Path, program0_directory: Path, program1_directory: Path, output_directory: Path
+) -> None:
+    """Write Program 2 output from the actual Program 0 and Program 1 CSVs.
+
+    Only the Program 1 domain CSVs and the Program 0 analysis CSV are read; trusted SAS
+    outputs are never opened here. The implementation is pending teammate review, so
+    callers label this stage's source accordingly.
+    """
+    root = project_root.resolve()
+    namespace = runpy.run_path(str(root / PROGRAM2_REFERENCE))
+    domains, analysis = namespace["read_inputs"](program1_directory, program0_directory)
+    output_directory.mkdir(parents=True, exist_ok=True)
+    for name, table in namespace["calculate_program2"](domains, analysis).items():
+        table.to_csv(output_directory / f"{name.lower()}.csv", index=False, float_format="%.17g")
