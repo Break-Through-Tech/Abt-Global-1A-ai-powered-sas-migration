@@ -23,6 +23,7 @@ from sasguard.execution.program0 import (
 )
 from sasguard.execution.runner import RunnerLimits
 from sasguard.prototypes.local_model import GeneratedPython
+from sasguard.prototypes.program0_feedback import structural_feedback
 from sasguard.prototypes.program0_prompt import (
     PromptPreviewRecord,
     _selected_file,
@@ -84,6 +85,9 @@ class ModelWorkflow(BaseModel):
     project_hashes_lf: dict[str, str]
     controller_hashes_lf: dict[str, str]
     image: str
+    diagnostic_version: Literal["program0-aggregate-v1", "program0-aggregate-v2"] = (
+        "program0-aggregate-v1"
+    )
     status: Literal["running", "passed", "failed", "error"] = "running"
     attempts: list[ModelAttempt] = Field(default_factory=list)
     human_review: Literal["not_recorded"] = "not_recorded"
@@ -178,6 +182,20 @@ def _request(messages: list[dict[str, str]], settings: ModelSettings) -> dict[st
             }
         },
     }
+
+
+def repair_diagnostics(
+    project_root: Path, report: CandidateReport, execution_report: Path, version: str
+) -> dict[str, JsonValue]:
+    """Retain legacy feedback reconstruction while adding versioned structural facts."""
+    feedback = aggregate_diagnostics(report)
+    if version == "program0-aggregate-v2":
+        feedback.update(
+            structural_feedback(project_root, execution_report.parent / "output", report)
+        )
+    elif version != "program0-aggregate-v1":
+        raise ValueError("unsupported repair diagnostic version")
+    return feedback
 
 
 def _candidate_code(response: _Response, requested_model: str) -> str:
@@ -297,10 +315,12 @@ def run_program0_model(
                 "src/sasguard/execution/program0.py",
                 "src/sasguard/prototypes/program0_prompt.py",
                 "src/sasguard/prototypes/program0_model.py",
+                "src/sasguard/prototypes/program0_feedback.py",
                 "src/sasguard/prototypes/local_model.py",
             ],
         ),
         image=image,
+        diagnostic_version="program0-aggregate-v2",
     )
     _check_snapshot(root, workflow)
     run = root / "reports/runs" / f"program0-model-{uuid4()}"
@@ -380,7 +400,9 @@ def run_program0_model(
                 )
             ):
                 break
-            diagnostics = _json_bytes(aggregate_diagnostics(result))
+            diagnostics = _json_bytes(
+                repair_diagnostics(root, result, report_path, workflow.diagnostic_version)
+            )
             (directory / "repair-diagnostics.json").write_bytes(diagnostics)
             attempt.hashes_bytes["repair-diagnostics.json"] = hashlib.sha256(
                 diagnostics
