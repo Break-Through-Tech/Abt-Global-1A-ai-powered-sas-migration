@@ -110,7 +110,8 @@ command writes `handoff.md` (CMS summary), `technical.md` (Abt) and `report.json
 evidence directory printed by `validate-pipeline`.
 
 `sasguard demo` runs the integrity check, the pipeline and the reports in one step and also
-writes a self-contained `report.html`.
+writes a self-contained `report.html`. Both `demo` and `validate-pipeline` take `--config PATH`
+for another release's configuration (see [adopting guide, section 3](docs/adopting-sasguard.md#3-using-it-on-a-new-cms-star-rating-release)).
 
 Adopting SASGuard at Abt: see [docs/adopting-sasguard.md](docs/adopting-sasguard.md).
 
@@ -120,7 +121,9 @@ setup, Dev Containers and JupyterLab are in [Development setup](docs/development
 
 ## Limits
 
-- Validated on the supplied July 2025 release only. Another release needs its own run.
+- Validated on the supplied July 2025 release only. `--config` runs the pipeline for another
+  release, proven so far on renamed July data; the model workflows and mortality prototype are
+  July 2025 only.
 - Program 2's bundled reference is pending teammate review; it is labeled helper-assisted
   model output, not human, and its output is not approved CMS ratings.
 - FASTCLUS helpers are based on SAS documentation; they have not yet been probed on

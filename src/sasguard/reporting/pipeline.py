@@ -18,12 +18,14 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 
 from sasguard.data import load_artifact
 from sasguard.provenance.hashing import sha256_file
+from sasguard.release import Release
 from sasguard.reporting.reader import report_runs_directory
 from sasguard.verification.pipeline import (
     TOTAL_ARTIFACTS,
     PipelineValidation,
     StageResult,
     derive_status,
+    release_of,
     render_summary,
 )
 from sasguard.verification.program1 import find_output_file
@@ -104,6 +106,8 @@ class PipelineRunReport(BaseModel):
     record_status: str
     full_pipeline_parity: bool
     input_release: str
+    release_label: str = "July 2025"
+    release_files: dict[str, str] = {}
     scope: str
     run_date: str
     run_date_source: str
@@ -192,6 +196,10 @@ def _recheck(
 
 
 def _consistency(record: PipelineValidation, issues: list[str]) -> None:
+    release = release_of(record)
+    recorded = {outcome.artifact for stage in record.stages for outcome in stage.artifacts}
+    if not recorded <= release.artifact_names:
+        issues.append("record_artifacts_do_not_belong_to_its_release")
     passed = sum(stage.artifacts_passed for stage in record.stages)
     integrity = bool(record.integrity_before.get("passed")) and bool(
         record.integrity_after.get("passed")
@@ -211,12 +219,13 @@ def _consistency(record: PipelineValidation, issues: list[str]) -> None:
 
 
 def _totals(
-    directory: Path | None, stage: StageResult, record: PipelineValidation
+    directory: Path | None, stage: StageResult, release: Release
 ) -> tuple[int, int, dict[str, int]] | None:
-    expected = stage.output_hashes.get("star_2025jul.csv")
+    star = release.star_filename
+    expected = stage.output_hashes.get(star)
     if directory is None or expected is None or stage.own_status != "passed":
         return None
-    path = find_output_file(directory, "star_2025jul.csv")
+    path = find_output_file(directory, star)
     if path is None or sha256_file(path, normalize_text=False) != expected:
         return None
     frame = load_artifact(path, key="PROVIDER_ID").frame
@@ -246,6 +255,7 @@ def read_pipeline_report(project_root: Path, run_directory: Path) -> PipelineRun
 
     issues: list[str] = []
     unverified: list[str] = []
+    release = release_of(record)
     _consistency(record, issues)
     summary = run / "summary.md"
     if summary.is_file() and summary.read_text(encoding="utf-8") != render_summary(record):
@@ -315,7 +325,7 @@ def read_pipeline_report(project_root: Path, run_directory: Path) -> PipelineRun
 
     # Totals are released only when every stage's recorded outputs were re-checked intact.
     totals = (
-        _totals(directories.get(2), record.stages[2], record)
+        _totals(directories.get(2), record.stages[2], release)
         if len(record.stages) == 3 and not unverified and not issues
         else None
     )
@@ -328,7 +338,7 @@ def read_pipeline_report(project_root: Path, run_directory: Path) -> PipelineRun
     distribution = None
     if totals is not None:
         processed, eligible, ratings = totals
-        counts_note = "Aggregates from the hash-checked Program 2 star_2025jul.csv."
+        counts_note = f"Aggregates from the hash-checked Program 2 {release.star_filename}."
         if scope_status == "VERIFIED":
             distribution = ratings
         else:
@@ -377,7 +387,16 @@ def read_pipeline_report(project_root: Path, run_directory: Path) -> PipelineRun
         scope_status=scope_status,
         record_status=record.status,
         full_pipeline_parity=record.full_pipeline_parity and not issues,
-        input_release="CMS Hospital Star Ratings, July 2025",
+        input_release=f"CMS Hospital Star Ratings, {release.label}",
+        release_label=release.label,
+        release_files={}
+        if record.release is None
+        else {
+            f"{record.release.config_path} (config)": record.release.config_sha256 or "unavailable",
+            f"{record.release.integrity_manifest} (integrity manifest)": (
+                record.release.integrity_manifest_sha256 or "unavailable"
+            ),
+        },
         scope=_clean(record.scope),
         run_date=mtime,
         run_date_source=f"modification time of {RECORD} (UTC); the record has no date field",
@@ -439,7 +458,7 @@ def _review_summary(report: PipelineRunReport) -> str:
 def render_pipeline_handoff(report: PipelineRunReport) -> str:
     label = report.scope_status
     lines = [
-        "# CMS July 2025 hospital star ratings: pipeline validation summary",
+        f"# CMS {report.release_label} hospital star ratings: pipeline validation summary",
         "",
         "Internal draft. Abt review and approval are required before sharing with CMS.",
         "",
@@ -537,8 +556,8 @@ def render_pipeline_handoff(report: PipelineRunReport) -> str:
             ),
             "* Trusted, not independently verified: the supplied SAS outputs and the CMS input "
             "data themselves.",
-            "* Not checked: any release other than July 2025, SAS runtime behaviour, statistical "
-            "correctness of the CMS method, and generated-code quality.",
+            f"* Not checked: any release other than {report.release_label}, SAS runtime behaviour, "
+            "statistical correctness of the CMS method, and generated-code quality.",
             "* Human review: " + _review_summary(report) + ". Abt approval: not recorded.",
         ]
     )
@@ -563,6 +582,10 @@ def render_pipeline_technical(report: PipelineRunReport) -> str:
         f"Run date: {report.run_date} ({report.run_date_source})",
         f"Run command: {report.run_command}",
         f"Input release: {report.input_release}",
+        *(
+            f"Release file {_md(path)}: sha256 {digest}"
+            for path, digest in report.release_files.items()
+        ),
         f"STAR mismatches: {_md(report.star_mismatches)}",
         f"Protected-file integrity before: {report.integrity_before}; "
         f"after: {report.integrity_after}",
@@ -810,8 +833,8 @@ def render_pipeline_html(report: PipelineRunReport) -> str:
         scope_note,
         "Trusted, not independently verified: the supplied SAS outputs and the CMS input "
         "data themselves.",
-        "Not checked: any release other than July 2025, SAS runtime behaviour, statistical "
-        "correctness of the CMS method, and generated-code quality.",
+        f"Not checked: any release other than {report.release_label}, SAS runtime behaviour, "
+        "statistical correctness of the CMS method, and generated-code quality.",
     ]
     note_html = "".join(f'<div class="note">{n}</div>' for n in notes)
     checked_html = "".join(f"<li>{html.escape(c)}</li>" for c in checked)
@@ -823,8 +846,8 @@ def render_pipeline_html(report: PipelineRunReport) -> str:
         f"<style>{HTML_STYLE}</style></head>\n"
         f'<body><main class="{css_class}">'
         "<h1>SASGuard pipeline validation</h1>"
-        '<p class="sub">CMS July 2025 hospital star ratings. Internal draft. Abt review and '
-        "approval are required before sharing with CMS.</p>"
+        f'<p class="sub">CMS {_h(report.release_label)} hospital star ratings. Internal draft. '
+        "Abt review and approval are required before sharing with CMS.</p>"
         f'<section class="badge" aria-label="Validation status"><strong>{html.escape(label)}'
         f"</strong><span>{html.escape(_html_status_sentence(report))}</span></section>"
         f'<p>{html.escape(comparisons)}</p><div class="tiles">{tile_html}</div>'

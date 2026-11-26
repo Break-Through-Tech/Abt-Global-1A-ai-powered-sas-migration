@@ -6,7 +6,8 @@ Reference Python implementation of the July 2025 SAS Program 2 and its macros
 Review status: this implementation was not written by a team member. It is pending
 teammate review and must not be labeled as a human reference until that review is recorded.
 
-Inputs: the five Program 1 domain CSVs and Program 0's std_data_2025jul_analysis.csv.
+Inputs: the five Program 1 domain CSVs and Program 0's std_data_<tag>_analysis.csv
+(``std_data_2025jul_analysis.csv`` by default; ``--release-tag`` selects another release).
 Trusted SAS outputs are never read here. Clustering reuses the repository FASTCLUS helpers
 in sasguard.semantics, which raise UnresolvedSASBehavior instead of guessing when the SAS
 documentation does not determine a result (exact ties, empty clusters, MAXITER).
@@ -183,9 +184,13 @@ def national_averages(frame: pd.DataFrame, domains: dict[str, pd.DataFrame]) -> 
 
 
 def calculate_program2(
-    domains: dict[str, pd.DataFrame], analysis: pd.DataFrame
+    domains: dict[str, pd.DataFrame], analysis: pd.DataFrame, release_tag: str = "2025jul"
 ) -> dict[str, pd.DataFrame]:
-    """Both Program 2 outputs from Program 1 domain tables and the Program 0 analysis table."""
+    """Both Program 2 outputs from Program 1 domain tables and the Program 0 analysis table.
+
+    The output names carry the release tag, e.g. ``STAR_2025JUL`` for ``2025jul``.
+    """
+    tag = release_tag.upper()
     scores = add_summary_score(merge_group_scores(domains))
     counts = report_counts(analysis)
     merged = scores.merge(counts, on=PROVIDER, how="outer").sort_values(PROVIDER, kind="stable")
@@ -207,7 +212,7 @@ def calculate_program2(
     star.columns = [name.upper() for name in star.columns]
     average = national_averages(merged, domains)
     average.columns = [name.upper() for name in average.columns]
-    return {"STAR_2025JUL": star, "NATIONAL_AVERAGE_2025JUL": average}
+    return {f"STAR_{tag}": star, f"NATIONAL_AVERAGE_{tag}": average}
 
 
 def _find(directory: Path, filename: str) -> Path:
@@ -219,7 +224,9 @@ def _find(directory: Path, filename: str) -> Path:
 
 
 def read_inputs(
-    program1_directory: Path, program0_directory: Path
+    program1_directory: Path,
+    program0_directory: Path,
+    analysis_filename: str = "std_data_2025jul_analysis.csv",
 ) -> tuple[dict[str, pd.DataFrame], pd.DataFrame]:
     """Read the Program 1 CSVs and the Program 0 analysis CSV with text IDs and exact floats."""
     domains = {
@@ -231,7 +238,7 @@ def read_inputs(
         for name in DOMAIN_SCORE_COLUMNS
     }
     analysis = pd.read_csv(
-        _find(program0_directory, "std_data_2025jul_analysis.csv"),
+        _find(program0_directory, analysis_filename.casefold()),
         converters={PROVIDER: str},
         float_precision="round_trip",
     )
@@ -250,10 +257,19 @@ def main() -> None:
     parser.add_argument(
         "--output-dir", type=Path, default=Path(os.environ.get("SASGUARD_OUTPUT_DIR", "."))
     )
+    parser.add_argument(
+        "--release-tag",
+        default="2025jul",
+        help="Release tag in the Program 0 analysis and Program 2 output names.",
+    )
     arguments = parser.parse_args()
-    domains, analysis = read_inputs(arguments.program1_dir, arguments.program0_dir)
+    domains, analysis = read_inputs(
+        arguments.program1_dir,
+        arguments.program0_dir,
+        f"std_data_{arguments.release_tag}_analysis.csv",
+    )
     arguments.output_dir.mkdir(parents=True, exist_ok=True)
-    for name, table in calculate_program2(domains, analysis).items():
+    for name, table in calculate_program2(domains, analysis, arguments.release_tag).items():
         output = arguments.output_dir / f"{name.lower()}.csv"
         table.to_csv(output, index=False, float_format="%.17g")
         print(f"Saved {output}: {len(table)} rows, {len(table.columns)} columns")

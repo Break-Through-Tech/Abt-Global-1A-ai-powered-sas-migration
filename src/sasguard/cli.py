@@ -10,7 +10,7 @@ import pyreadstat
 import typer
 
 from sasguard import __version__
-from sasguard.config import load_project_configuration
+from sasguard.config import load_project_configuration, load_release
 from sasguard.execution.program0 import (
     CandidateInputFormat,
     run_program0_candidate,
@@ -33,6 +33,7 @@ from sasguard.prototypes.program0_prompt import (
 )
 from sasguard.prototypes.program01 import run_program01_chain
 from sasguard.prototypes.program2_model import run_program2_model
+from sasguard.release import DEFAULT_CONFIG_PATH, Release
 from sasguard.reporting import write_run_report
 from sasguard.verification.integrity import load_and_verify_integrity
 from sasguard.verification.pipeline import (
@@ -304,9 +305,19 @@ REFERENCE_PROGRAM2_NOTE = "Program 2 reference implementation pending teammate r
 REFERENCE_PROGRAM2_REVIEWED_NOTE = "Program 2 reference implementation, teammate review recorded"
 
 
+def _load_release(root: Path, config: Path) -> Release:
+    """Load the release a pipeline command runs for; setup errors exit with code 2."""
+    try:
+        return load_release(config, project_root=root)
+    except (OSError, ValueError) as error:
+        typer.echo(f"Configuration could not be loaded: {error}", err=True)
+        raise typer.Exit(code=2) from error
+
+
 def _record_pipeline_validation(
     root: Path,
     *,
+    release: Release,
     program2_output: Path | None,
     program2_source: StageSource | None,
     program2_reviewed_by: str,
@@ -360,13 +371,13 @@ def _record_pipeline_validation(
         run.mkdir(parents=True)
         if run_human_references:
             program0_output = run / "program0"
-            produce_program0(root, program0_output)
+            produce_program0(root, program0_output, release)
             program0_source = StageSource.HUMAN_REFERENCE
         if run_human_references or run_human_program1:
             if program0_output is None:
                 raise ValueError("--run-human-program1 needs --program0-output")
             program1_output = run / "program1"
-            produce_program1(root, program0_output, program1_output)
+            produce_program1(root, program0_output, program1_output, release)
             program1_source = StageSource.HUMAN_REFERENCE
         if program0_output is None or program0_source is None:
             raise ValueError("Program 0 needs --program0-output and --program0-source")
@@ -374,7 +385,7 @@ def _record_pipeline_validation(
             raise ValueError("Program 1 needs --program1-output and --program1-source")
         if run_reference_program2:
             program2_output = run / "program2"
-            produce_program2(root, program0_output, program1_output, program2_output)
+            produce_program2(root, program0_output, program1_output, program2_output, release)
             program2_source = StageSource.HELPER_ASSISTED_MODEL_OUTPUT
             program2_code = root / PROGRAM2_REFERENCE
             if not program2_note:
@@ -400,6 +411,7 @@ def _record_pipeline_validation(
                 note=program2_note,
                 reviewed_by=program2_reviewed_by.strip(),
             ),
+            release,
         )
     except (OSError, ValueError) as error:
         typer.echo(f"Pipeline validation could not complete: {error}", err=True)
@@ -478,6 +490,13 @@ def validate_pipeline_command(
     output_directory: Annotated[
         Path | None, typer.Option(help="New directory under reports/runs for the record.")
     ] = None,
+    config: Annotated[
+        Path,
+        typer.Option(
+            help="Project configuration, relative to the repository root by default. Its "
+            "release section sets the release tag and integrity manifest."
+        ),
+    ] = Path(DEFAULT_CONFIG_PATH),
     project_root: Annotated[Path, typer.Option(help="Repository root.")] = Path("."),
 ) -> None:
     """Validate all ten Program 0, 1 and 2 artifacts on actual chained Python outputs.
@@ -488,6 +507,7 @@ def validate_pipeline_command(
     root = project_root.resolve()
     result, run, summary = _record_pipeline_validation(
         root,
+        release=_load_release(root, config),
         program2_output=program2_output,
         program2_source=program2_source,
         program2_reviewed_by=program2_reviewed_by,
@@ -519,6 +539,13 @@ def demo_command(
             "change the code origin."
         ),
     ] = "",
+    config: Annotated[
+        Path,
+        typer.Option(
+            help="Project configuration, relative to the repository root by default. Its "
+            "release section sets the release tag and integrity manifest."
+        ),
+    ] = Path(DEFAULT_CONFIG_PATH),
     project_root: Annotated[Path, typer.Option(help="Repository root.")] = Path("."),
 ) -> None:
     """Run the whole verified pipeline from the bundled references and write reports.
@@ -528,7 +555,8 @@ def demo_command(
     Docker. Exits 0 only for PASS; PARTIAL and FAIL exit 1 after the reports are written.
     """
     root = project_root.resolve()
-    manifest_path = root / "configs" / "protected-artifacts.json"
+    release = _load_release(root, config)
+    manifest_path = root / release.integrity_manifest
     try:
         integrity = load_and_verify_integrity(root, manifest_path)
     except (OSError, ValueError) as error:
@@ -537,7 +565,8 @@ def demo_command(
     if not integrity.passed:
         typer.echo(
             "Demo stopped: protected-file integrity check failed. Restore the supplied files "
-            "(run `sasguard verify-integrity` for details).",
+            f"(run `sasguard verify-integrity --manifest {release.integrity_manifest}` for "
+            "details).",
             err=True,
         )
         for label, paths in (
@@ -552,6 +581,7 @@ def demo_command(
     typer.echo("Running Programs 0, 1 and 2 from the bundled references. This takes a moment.")
     result, run, _ = _record_pipeline_validation(
         root,
+        release=release,
         program2_output=None,
         program2_source=None,
         program2_reviewed_by=program2_reviewed_by,

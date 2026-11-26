@@ -39,7 +39,7 @@ parity) or `FAIL`. Only `PASS` exits 0.
 
 * It is not Abt or CMS approval. Human review and client approval are not recorded by the
   validator.
-* It does not cover any release other than the supplied one.
+* It does not cover any release other than the one the run was configured for.
 * It does not prove the SAS itself is right. SAS is the reference by definition.
 * If a stage's code origin is not `human_reference`, the PASS says nothing about who wrote or
   reviewed that code.
@@ -129,30 +129,63 @@ evidence and you get NOT VERIFIED with no hospital totals.
 
 ## 3. Using it on a new CMS star-rating release
 
-Only July 2025 has been run. A second release has not been tried, so treat this section as the
-expected work, not a tested procedure. Read it as a list of what is tied to July 2025 today.
+`validate-pipeline` and `demo` take `--config PATH`, so a new release needs files, not code
+edits. Only July 2025 has been run on real data. The second release below is a synthetic one:
+the July 2025 data with every release-tagged file renamed to `2026jan`
+(`tests/test_release_config.py`). It shows that no July name is hardcoded on the pipeline path;
+it says nothing about how a real new release behaves.
 
-**Files that carry the release** (all under `configs/` and `data/Project_1/`):
+**Steps for a new release (tag `2026jan` as the example):**
+
+1. Put the supplied materials under a new protected root, for instance a copy of the
+   `data/Project_1` layout, with every release-tagged file named with the lowercase tag:
+   `alldata_2026jan.csv`, `std_data_2026jan_analysis.sas7bdat`, `star_2026jan.sas7bdat`, and
+   so on. The CSV copies use the upper-case form (`STAR_2026JAN.csv`).
+   The project root also needs `reference_python/`, and `configs/program0-comparison-policies.json`,
+   `program1-...` and `program2-...` copied unchanged (the run reads them from there and stops
+   with a missing-file error otherwise). The SAS program files may keep their July names; list
+   them as they are in the configuration.
+2. Write a new configuration beside `configs/cms_2025jul.yaml`, for example
+   `configs/cms_2026jan.yaml`, following [Project configuration](project-configuration.md).
+   List the ten artifacts with their `2026JAN` names and add the release section:
+
+   ```yaml
+   release:
+     tag: 2026jan                                     # lowercase letters and digits
+     integrity_manifest: configs/protected-artifacts-2026jan.json
+   ```
+
+   Both fields are optional. Without a `release` section the tag is `2025jul` and the manifest
+   is `configs/protected-artifacts.json`, which is why the July 2025 configuration did not
+   change.
+3. Build the new manifest for the new files (see the regeneration policy below) and save it at
+   the path named in the configuration.
+4. Run `sasguard validate-pipeline --config configs/cms_2026jan.yaml ...` or
+   `sasguard demo --config configs/cms_2026jan.yaml`, then `sasguard report-run`. The record
+   stores the release tag and the SHA-256 of the configuration and manifest that were used, and
+   the report shows them.
+
+The tag decides every release-dependent name: `STAR_2026JAN`, `NATIONAL_AVERAGE_2026JAN`,
+`MEASURE_AVERAGE_STDDEV_2026JAN`, `STD_DATA_2026JAN_ANALYSIS`, their lowercase CSV filenames,
+and the input file `alldata_2026jan.csv`. The other six artifacts keep their names. The names
+are derived in one place, `src/sasguard/release.py`.
+
+**Files that carry the release:**
 
 | What | Location | Release-specific? |
 |---|---|---|
-| Project configuration: programs, macro, input paths, ten artifact names and files, key, repair attempts | `configs/cms_2025jul.yaml` ([Project configuration](project-configuration.md)) | Yes. Create a separate YAML for a new release rather than overwriting July 2025, per that document. |
+| Project configuration: programs, macro, input paths, ten artifact names and files, key, release tag and manifest | `configs/cms_2025jul.yaml` ([Project configuration](project-configuration.md)) | Yes. Create a separate YAML for a new release rather than overwriting July 2025. |
 | Supplied SAS programs, macro, input dataset, SAS outputs | `data/Project_1/` | Yes. |
-| Protected-artifact manifest | `configs/protected-artifacts.json` | Yes. Regenerated for the new files (below). |
-| Comparison policies (keys, exact columns, tolerances) | `configs/program0-comparison-policies.json`, `program1-...`, `program2-...` | Partly. The structure and the `1e-12` rule are reusable; column lists and exact-versus-numeric choices follow the SAS output schemas. |
+| Protected-artifact manifest | `configs/protected-artifacts.json`, or the path in `release.integrity_manifest` | Yes. Built for the new files (below). |
+| Comparison policies (keys, exact columns, tolerances) | `configs/program0-comparison-policies.json`, `program1-...`, `program2-...` | Shared. They are written once, keyed by the July 2025 names, and applied to a new release by role: `STAR_2026JAN` uses the `STAR_2025JUL` entry. No tolerance changes. If the new SAS output schema differs, the comparison fails on the schema instead of adapting. |
 | Artifact lineage | `configs/cms-artifact-lineage.json` | Yes, if the dataset graph changes. |
-| Human references | `reference_python/domain_scoring.py`, `reference_python/program2.py`, `src/sasguard/program0.py` | Yes. They implement the July 2025 SAS programs. |
+| Human references | `reference_python/domain_scoring.py`, `reference_python/program2.py`, `src/sasguard/program0.py` | Yes. They implement the July 2025 SAS programs; a changed SAS program needs a changed reference. |
 
-**Be aware the code hardcodes the July 2025 paths.** `src/sasguard/verification/pipeline.py`
-sets `CONFIG_PATH = "configs/cms_2025jul.yaml"`, `INTEGRITY_PATH`, the three policy paths and
-the filename `std_data_2025jul_analysis.csv`. The artifact-name mappings in
-`verification/program0.py`, `program1.py` and `program2.py` and the reference runners in
-`src/sasguard/prototypes/pipeline_reference.py` use the `2025JUL` names, and
-`src/sasguard/execution/program0.py` hardcodes the input and Program 0 paths. CMS releases
-name artifacts by release date, so a new release means editing those constants (or keeping the
-same logical names in a copied data tree) and adding a test run. There is no
-`--config` option on `validate-pipeline` today. This is the largest piece of work in adopting
-SASGuard for another release, and it has not been done.
+**Still July 2025 only:** the model workflows (`model-program0`, `model-program2`,
+`run-program0-candidate`, `run-program01-chain`), the mortality prototype, the Program 0 scoped
+reports, and the Program 0 Docker execution path in `src/sasguard/execution/program0.py` still
+read `configs/cms_2025jul.yaml` and the `2025JUL` names. `--config` applies to the full
+pipeline (`validate-pipeline`, `demo`, and `report-run` on their records) only.
 
 **Regenerating the protected-artifact manifest.** The manifest is a hash list of every file
 under the protected root `data/Project_1`. Do not regenerate it to make a failure disappear.
@@ -162,7 +195,16 @@ independent teammate verification of the new files, one focused change containin
 the manifest, old and new hashes in the review evidence, and approval from someone other than
 the author. There is no CLI command that writes the manifest. The function that builds it is
 `build_integrity_manifest` in `src/sasguard/verification/integrity.py`; a reviewer runs it and
-inspects the diff. After the change, `sasguard verify-integrity` should report the new file
+inspects the diff. For example, from the project root with the environment activated
+(replace the output path with the `release.integrity_manifest` in your config):
+
+```text
+python -c "from pathlib import Path; from sasguard.verification.integrity import build_integrity_manifest; m = build_integrity_manifest(Path('.'), ['data/Project_1']); Path('configs/protected-artifacts-2026jan.json').write_text(m.model_dump_json(indent=2) + '\n')"
+```
+
+List every directory that holds the release's input, SAS programs and trusted outputs. A
+manifest that covers fewer files protects fewer files, and the run records which manifest
+was used. After the change, `sasguard verify-integrity` should report the new file
 count (not 29).
 
 **Reusable as is:** the comparator and policy engine, the integrity checker, the isolated
@@ -172,7 +214,7 @@ the SAS-semantics helpers.
 **Release-specific:** tolerances you choose per column, key and schema lists, the artifact
 names and the three human reference programs.
 
-**Not tested:** any release other than July 2025; any change to measure counts, schema
+**Not tested:** any real release other than July 2025 (the `2026jan` run is renamed July data); any change to measure counts, schema
 additions or renamed columns; behavior when a FASTCLUS tie, empty cluster or MAXITER stop
 occurs on real data (the helpers raise `UnresolvedSASBehavior` rather than guess; none
 occurred in July 2025). A second release is the single most valuable test Abt can run.
@@ -295,7 +337,9 @@ prices and caps marked TBD. No paid use should be approved against it until it i
 
 ## 7. Known limits and open items
 
-* **One release.** Only July 2025 has been validated (section 3).
+* **One real release.** Only July 2025 has been validated on real data. A second release runs
+  through `--config` (section 3), proven only on renamed July data; model workflows and the
+  mortality prototype remain July 2025 only.
 * **Program 2 reference is pending teammate review.** `reference_python/program2.py` was not
   written by a team member. It is recorded as `helper_assisted_model_output` with a fixed
   note, its hash is recorded, and its origin cannot be relabeled. Its output is not approved

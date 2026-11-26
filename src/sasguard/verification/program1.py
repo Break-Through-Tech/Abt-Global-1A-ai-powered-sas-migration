@@ -19,11 +19,11 @@ from sasguard.config import load_project_configuration
 from sasguard.data import ArtifactLoadError, load_artifact
 from sasguard.prototypes.program01 import _copy_check
 from sasguard.provenance.hashing import sha256_file
+from sasguard.release import JULY_2025, Release
 from sasguard.verification.artifact import ArtifactComparison
 from sasguard.verification.comparator import ComparisonInputError, compare_artifacts
 from sasguard.verification.policy import ArtifactComparisonPolicy
 
-CONFIG_PATH = Path("configs/cms_2025jul.yaml")
 POLICY_PATH = Path("configs/program1-comparison-policies.json")
 KEY = "PROVIDER_ID"
 
@@ -63,17 +63,22 @@ class Program1Validation(BaseModel):
         return self.status == "passed"
 
 
-def load_program1_policies(project_root: Path) -> dict[str, ArtifactComparisonPolicy]:
-    """Load the committed per-domain comparison policies."""
+def load_program1_policies(
+    project_root: Path, release: Release = JULY_2025
+) -> dict[str, ArtifactComparisonPolicy]:
+    """Load the committed per-domain comparison policies, keyed for ``release`` by role."""
     payload = json.loads((project_root / POLICY_PATH).read_text(encoding="utf-8"))
     if payload.get("schema_version") != 1:
         raise ValueError("unsupported Program 1 policy schema version")
     artifacts = payload.get("artifacts", {})
     if set(artifacts) != set(PROGRAM1_ARTIFACTS.values()):
         raise ValueError("Program 1 policies must cover exactly the five Program 1 artifacts")
-    return {
-        name: ArtifactComparisonPolicy.model_validate(policy) for name, policy in artifacts.items()
-    }
+    return release.policies_by_release_artifact(
+        {
+            name: ArtifactComparisonPolicy.model_validate(policy)
+            for name, policy in artifacts.items()
+        }
+    )
 
 
 def find_output_file(directory: Path, filename: str) -> Path | None:
@@ -94,17 +99,20 @@ def validate_program1_outputs(
     project_root: Path,
     output_directory: Path,
     program0_analysis: Path | None = None,
+    release: Release = JULY_2025,
 ) -> Program1Validation:
     """Validate the five Program 1 CSVs in ``output_directory`` against SAS.
 
     Presence is checked first, then readability, then the keyed SAS comparison for each
     domain. Every computable comparison is retained even when another file is malformed.
-    With ``program0_analysis`` (the actual Python ``std_data_2025jul_analysis.csv``), copied
+    With ``program0_analysis`` (the actual Python Program 0 analysis CSV), copied
     standardized measures are also compared exactly with that file.
     """
     root = project_root.resolve()
-    policies = load_program1_policies(root)
-    paths = load_project_configuration(root / CONFIG_PATH, project_root=root).resolve_paths(root)
+    policies = load_program1_policies(root, release)
+    paths = load_project_configuration(root / release.config_path, project_root=root).resolve_paths(
+        root
+    )
 
     located = {name: find_output_file(output_directory, name) for name in PROGRAM1_ARTIFACTS}
     missing = {name: "file is missing" for name, path in located.items() if path is None}

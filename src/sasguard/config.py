@@ -10,6 +10,13 @@ from typing import Any, Literal, Self
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from sasguard.release import (
+    DEFAULT_INTEGRITY_MANIFEST,
+    DEFAULT_TAG,
+    Release,
+    validate_tag,
+)
+
 _IDENTIFIER_PATTERN = re.compile(r"^[A-Z_][A-Z0-9_]*$")
 _PROJECT_NAME_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
 
@@ -194,6 +201,26 @@ class RepairSettings(StrictConfigModel):
     max_attempts: int = Field(ge=0, le=3)
 
 
+class ReleaseSettings(StrictConfigModel):
+    """Release tag and protected-file manifest. Omitted fields mean July 2025."""
+
+    tag: str = DEFAULT_TAG
+    integrity_manifest: str = DEFAULT_INTEGRITY_MANIFEST
+
+    @field_validator("tag")
+    @classmethod
+    def validate_release_tag(cls, value: str) -> str:
+        return validate_tag(value)
+
+    @field_validator("integrity_manifest")
+    @classmethod
+    def validate_manifest_path(cls, value: str) -> str:
+        path = _normalize_relative_path(value)
+        if not path.lower().endswith(".json"):
+            raise ValueError("integrity manifest path must end with .json")
+        return path
+
+
 class ProjectConfiguration(StrictConfigModel):
     """Versioned definition of one SAS migration case study."""
 
@@ -203,6 +230,7 @@ class ProjectConfiguration(StrictConfigModel):
     input: InputSettings
     reference: ReferenceSettings
     repair: RepairSettings
+    release: ReleaseSettings = Field(default_factory=ReleaseSettings)
 
     def resolve_paths(self, project_root: Path) -> ResolvedProjectPaths:
         """Resolve all configured paths beneath a repository root."""
@@ -288,3 +316,20 @@ def load_project_configuration(
     if require_existing:
         paths.require_existing()
     return configuration
+
+
+def load_release(config_path: Path, *, project_root: Path) -> Release:
+    """Load a configuration and return its release, recording the config's own path.
+
+    ``config_path`` is absolute or relative to ``project_root`` and must stay beneath it.
+    """
+    root = project_root.resolve()
+    absolute = (config_path if config_path.is_absolute() else root / config_path).resolve()
+    if not absolute.is_relative_to(root):
+        raise ValueError(f"configuration must be inside the project root: {config_path}")
+    configuration = load_project_configuration(absolute, project_root=root)
+    return Release(
+        tag=configuration.release.tag,
+        integrity_manifest=configuration.release.integrity_manifest,
+        config_path=absolute.relative_to(root).as_posix(),
+    )

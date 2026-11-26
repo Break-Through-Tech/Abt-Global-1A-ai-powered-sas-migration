@@ -15,27 +15,24 @@ import pyreadstat
 
 from sasguard.config import load_project_configuration
 from sasguard.program0 import translate_program0
+from sasguard.release import JULY_2025, Release
 
-PROGRAM0_OUTPUT_NAMES = (
-    "less100_measure.csv",
-    "measure_average_stddev_2025jul.csv",
-    "std_data_2025jul_analysis.csv",
-)
-ANALYSIS = "std_data_2025jul_analysis.csv"
 REFERENCE = "reference_python/domain_scoring.py"
 
 
-def run_human_program0(project_root: Path, output_directory: Path) -> None:
+def run_human_program0(
+    project_root: Path, output_directory: Path, release: Release = JULY_2025
+) -> None:
     """Write the three Program 0 outputs from the supplied hospital input."""
     root = project_root.resolve()
-    paths = load_project_configuration(
-        root / "configs/cms_2025jul.yaml", project_root=root
-    ).resolve_paths(root)
+    paths = load_project_configuration(root / release.config_path, project_root=root).resolve_paths(
+        root
+    )
     source, _ = pyreadstat.read_sas7bdat(paths.input_sas7bdat)
     result = translate_program0(source)
     output_directory.mkdir(parents=True, exist_ok=True)
     for name, frame in zip(
-        PROGRAM0_OUTPUT_NAMES,
+        release.program0_artifacts,
         (result.excluded_measures, result.raw_statistics, result.analysis),
         strict=True,
     ):
@@ -43,7 +40,10 @@ def run_human_program0(project_root: Path, output_directory: Path) -> None:
 
 
 def run_human_program1(
-    project_root: Path, program0_directory: Path, output_directory: Path
+    project_root: Path,
+    program0_directory: Path,
+    output_directory: Path,
+    release: Release = JULY_2025,
 ) -> None:
     """Score the five domains from the actual Program 0 CSV with the human reference.
 
@@ -53,7 +53,9 @@ def run_human_program1(
     root = project_root.resolve()
     namespace = runpy.run_path(str(root / REFERENCE))
     frame = pd.read_csv(
-        program0_directory / ANALYSIS, converters={"PROVIDER_ID": str}, float_precision="round_trip"
+        program0_directory / release.analysis_filename,
+        converters={"PROVIDER_ID": str},
+        float_precision="round_trip",
     )
     output_directory.mkdir(parents=True, exist_ok=True)
     for name, table in namespace["calculate_all_domains"](frame).items():
@@ -64,7 +66,11 @@ PROGRAM2_REFERENCE = "reference_python/program2.py"
 
 
 def run_human_program2(
-    project_root: Path, program0_directory: Path, program1_directory: Path, output_directory: Path
+    project_root: Path,
+    program0_directory: Path,
+    program1_directory: Path,
+    output_directory: Path,
+    release: Release = JULY_2025,
 ) -> None:
     """Write Program 2 output from the actual Program 0 and Program 1 CSVs.
 
@@ -74,7 +80,9 @@ def run_human_program2(
     """
     root = project_root.resolve()
     namespace = runpy.run_path(str(root / PROGRAM2_REFERENCE))
-    domains, analysis = namespace["read_inputs"](program1_directory, program0_directory)
+    domains, analysis = namespace["read_inputs"](
+        program1_directory, program0_directory, release.analysis_filename
+    )
     output_directory.mkdir(parents=True, exist_ok=True)
-    for name, table in namespace["calculate_program2"](domains, analysis).items():
+    for name, table in namespace["calculate_program2"](domains, analysis, release.tag).items():
         table.to_csv(output_directory / f"{name.lower()}.csv", index=False, float_format="%.17g")

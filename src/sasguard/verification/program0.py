@@ -17,6 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sasguard.config import load_project_configuration
 from sasguard.data import ArtifactLoadError, LoadedArtifact, load_artifact
 from sasguard.provenance.hashing import sha256_file, validate_sha256
+from sasguard.release import JULY_2025, Release
 from sasguard.verification.artifact import ArtifactComparison
 from sasguard.verification.comparator import ComparisonInputError, compare_artifacts
 from sasguard.verification.policy import (
@@ -25,16 +26,11 @@ from sasguard.verification.policy import (
     ComparisonKind,
 )
 
-CONFIG_PATH = Path("configs/cms_2025jul.yaml")
 POLICY_PATH = Path("configs/program0-comparison-policies.json")
 EXACT_STATISTIC_ROWS: tuple[Literal["N"], Literal["MIN"], Literal["MAX"]] = ("N", "MIN", "MAX")
 
 # Output CSV filename -> trusted SAS artifact name in the project configuration.
-PROGRAM0_ARTIFACTS: dict[str, str] = {
-    "less100_measure.csv": "LESS100_MEASURE",
-    "measure_average_stddev_2025jul.csv": "MEASURE_AVERAGE_STDDEV_2025JUL",
-    "std_data_2025jul_analysis.csv": "STD_DATA_2025JUL_ANALYSIS",
-}
+PROGRAM0_ARTIFACTS: dict[str, str] = JULY_2025.program0_artifacts
 
 Program0ValidationStatus = Literal[
     "passed", "failed", "hash_mismatch", "missing_outputs", "malformed_outputs"
@@ -60,8 +56,10 @@ class Program0Validation(BaseModel):
         return self.status == "passed"
 
 
-def load_program0_policies(project_root: Path) -> dict[str, ArtifactComparisonPolicy]:
-    """Load the committed per-artifact comparison policies."""
+def load_program0_policies(
+    project_root: Path, release: Release = JULY_2025
+) -> dict[str, ArtifactComparisonPolicy]:
+    """Load the committed per-artifact comparison policies, keyed for ``release`` by role."""
     payload = json.loads((project_root / POLICY_PATH).read_text(encoding="utf-8"))
     if payload.get("schema_version") != 1:
         raise ValueError("unsupported Program 0 policy schema version")
@@ -70,16 +68,22 @@ def load_program0_policies(project_root: Path) -> dict[str, ArtifactComparisonPo
     artifacts = payload.get("artifacts", {})
     if set(artifacts) != set(PROGRAM0_ARTIFACTS.values()):
         raise ValueError("Program 0 policies must cover exactly the three Program 0 artifacts")
-    return {
-        name: ArtifactComparisonPolicy.model_validate(policy) for name, policy in artifacts.items()
-    }
+    return release.policies_by_release_artifact(
+        {
+            name: ArtifactComparisonPolicy.model_validate(policy)
+            for name, policy in artifacts.items()
+        }
+    )
 
 
 def _compare_statistics(
-    actual: LoadedArtifact, expected: LoadedArtifact, policy: ArtifactComparisonPolicy
+    actual: LoadedArtifact,
+    expected: LoadedArtifact,
+    policy: ArtifactComparisonPolicy,
+    release: Release = JULY_2025,
 ) -> ArtifactComparison:
     """Counts and selected raw extrema are exact; computed moments keep their tolerance."""
-    artifact = "MEASURE_AVERAGE_STDDEV_2025JUL"
+    artifact = release.artifact("MEASURE_AVERAGE_STDDEV")
     key = "_STAT_"
     if policy.keys != (key,):
         raise ValueError("Program 0 statistics must align by _STAT_")
@@ -132,6 +136,7 @@ def validate_program0_outputs(
     project_root: Path,
     output_directory: Path,
     expected_sha256: Mapping[str, str],
+    release: Release = JULY_2025,
 ) -> Program0Validation:
     """Validate the three Program 0 CSVs in ``output_directory`` against SAS.
 
@@ -142,10 +147,9 @@ def validate_program0_outputs(
     Raises ``ValueError`` if ``expected_sha256`` does not name exactly the three outputs,
     because that is a caller error rather than a candidate failure.
     """
-    if set(expected_sha256) != set(PROGRAM0_ARTIFACTS):
-        raise ValueError(
-            f"expected_sha256 must name exactly these outputs: {sorted(PROGRAM0_ARTIFACTS)}"
-        )
+    artifacts = release.program0_artifacts
+    if set(expected_sha256) != set(artifacts):
+        raise ValueError(f"expected_sha256 must name exactly these outputs: {sorted(artifacts)}")
     expected_hashes = {name: validate_sha256(value) for name, value in expected_sha256.items()}
     root = project_root.resolve()
     output = output_directory.resolve()
@@ -153,7 +157,7 @@ def validate_program0_outputs(
     # Symlinks are rejected so a candidate cannot point the validator at another file.
     missing = {
         name: "file is missing"
-        for name in PROGRAM0_ARTIFACTS
+        for name in artifacts
         if (output / name).is_symlink() or not (output / name).is_file()
     }
     if missing:
@@ -161,26 +165,28 @@ def validate_program0_outputs(
 
     changed = {
         name: "SHA-256 differs from the hash recorded at collection"
-        for name in PROGRAM0_ARTIFACTS
+        for name in artifacts
         if sha256_file(output / name) != expected_hashes[name]
     }
     if changed:
         return Program0Validation(status="hash_mismatch", errors=changed)
 
-    policies = load_program0_policies(root)
-    paths = load_project_configuration(root / CONFIG_PATH, project_root=root).resolve_paths(root)
+    policies = load_program0_policies(root, release)
+    paths = load_project_configuration(root / release.config_path, project_root=root).resolve_paths(
+        root
+    )
 
     results: dict[str, ArtifactComparison] = {}
     malformed: dict[str, str] = {}
-    for filename, artifact in PROGRAM0_ARTIFACTS.items():
+    for filename, artifact in artifacts.items():
         policy = policies[artifact]
         key = policy.keys[0]
         try:
             actual = load_artifact(output / filename, key=key)
             expected = load_artifact(paths.reference_sas7bdat[artifact], key=key)
             results[filename] = (
-                _compare_statistics(actual, expected, policy)
-                if artifact == "MEASURE_AVERAGE_STDDEV_2025JUL"
+                _compare_statistics(actual, expected, policy, release)
+                if artifact == release.artifact("MEASURE_AVERAGE_STDDEV")
                 else compare_artifacts(actual, expected, artifact=artifact, policy=policy)
             )
         except (ArtifactLoadError, ComparisonInputError, ValueError) as error:

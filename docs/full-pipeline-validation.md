@@ -42,6 +42,18 @@ repository. Program 2 output comes either from the reference implementation belo
 model candidate run (for example `model-program2` or the
 [STRICT replay](experiments/2026-11-16-program2-strict-replay.md)).
 
+### Other releases: `--config`
+
+`validate-pipeline` and `demo` take `--config PATH` (default `configs/cms_2025jul.yaml`). The
+configuration's optional `release` section sets the release tag, which names the tagged
+artifacts and files (`STAR_2026JAN`, `star_2026jan.csv`, `alldata_2026jan.csv`), and the
+integrity manifest used for the before and after checks. The comparison policies and their
+fixed tolerances are unchanged: a new release uses the policy entry of the same artifact role.
+The record stores the release tag and the SHA-256 of the configuration and manifest, and
+`report-run` shows them. Steps and limits are in
+[Adopting SASGuard, section 3](adopting-sasguard.md#3-using-it-on-a-new-cms-star-rating-release).
+Only July 2025 has been run on real data.
+
 The record is written to a new `reports/runs/pipeline-*` directory as
 `pipeline-validation.json` and `summary.md`. The exit code is 0 only for `PASS`.
 
@@ -185,5 +197,6 @@ Remaining work:
 * An independent replay of this command on a clean checkout and runner image.
 * Chained runs of the Program 0 and Program 2 model candidates from #68 and #70 (direct
   and helper-assisted), recorded with the correct source flag.
-* A prospective Program 2 result without manual correction, and other CMS releases.
+* A prospective Program 2 result without manual correction, and a real second CMS release
+  (`--config` is proven only on renamed July data).
 * Abt review and approval before any result is shared with CMS.

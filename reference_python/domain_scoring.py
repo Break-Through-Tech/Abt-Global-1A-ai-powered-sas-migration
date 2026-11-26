@@ -2,7 +2,7 @@
 The input must already contain standardized measures from Program 0.
 
 Flow:
-1. Take Program 0's output (std_data_2025jul_analysis.sas7bdat)
+1. Take Program 0's output (std_data_<release tag>_analysis.sas7bdat)
 2. For each of the 5 domains: count -> weight -> average -> standardize
 3. These measures are condensed into 5 CSV files:
 (OUTCOME_MORTALITY, OUTCOME_SAFETY, OUTCOME_READMISSION, PTEXP, PROCESS)
@@ -155,12 +155,20 @@ def main() -> None:
     output_directory = Path(os.environ.get("SASGUARD_OUTPUT_DIR", "."))
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
+        "--release-tag",
+        default="2025jul",
+        help="Release tag in the Program 0 intermediate's name (default: 2025jul).",
+    )
+    parser.add_argument(
         "--input",
         type=Path,
-        default=input_directory / "std_data_2025jul_analysis.sas7bdat",
+        help="Program 0 intermediate; default std_data_<release tag>_analysis.sas7bdat "
+        "in SASGUARD_INPUT_DIR.",
     )
     parser.add_argument("--output-dir", type=Path, default=output_directory)
     arguments = parser.parse_args()
+    if arguments.input is None:
+        arguments.input = input_directory / f"std_data_{arguments.release_tag}_analysis.sas7bdat"
     if arguments.input.suffix.casefold() != ".sas7bdat":
         raise ValueError("this reference entry point requires a SAS7BDAT intermediate")
 

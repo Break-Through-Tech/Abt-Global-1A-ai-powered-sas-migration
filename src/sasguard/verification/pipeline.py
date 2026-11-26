@@ -42,12 +42,12 @@ from sasguard.columns import resolve_column_name
 from sasguard.config import ResolvedProjectPaths, load_project_configuration
 from sasguard.data import ArtifactLoadError, LoadedArtifact, load_artifact
 from sasguard.provenance.hashing import sha256_file
+from sasguard.release import JULY_2025, Release
 from sasguard.verification.artifact import ArtifactComparison
 from sasguard.verification.comparator import ComparisonInputError, compare_artifacts
 from sasguard.verification.integrity import load_and_verify_integrity
 from sasguard.verification.policy import ArtifactComparisonPolicy
 from sasguard.verification.program0 import (
-    PROGRAM0_ARTIFACTS,
     _compare_statistics,
     load_program0_policies,
     validate_program0_outputs,
@@ -59,22 +59,16 @@ from sasguard.verification.program1 import (
     validate_program1_outputs,
 )
 from sasguard.verification.program2 import (
-    ARTIFACTS as PROGRAM2_ARTIFACTS,
-)
-from sasguard.verification.program2 import (
     check_domain_passthrough,
     load_program2_policies,
     validate_program2,
 )
 
-CONFIG_PATH = "configs/cms_2025jul.yaml"
-INTEGRITY_PATH = "configs/protected-artifacts.json"
 POLICY_PATHS = {
     0: "configs/program0-comparison-policies.json",
     1: "configs/program1-comparison-policies.json",
     2: "configs/program2-comparison-policies.json",
 }
-ANALYSIS_FILENAME = "std_data_2025jul_analysis.csv"
 TOTAL_ARTIFACTS = 10
 FIXED_TOLERANCE = 1e-12
 DOMAIN_SCORE_COLUMNS = {
@@ -195,6 +189,22 @@ class StageResult(BaseModel):
         )
 
 
+class ReleaseRecord(BaseModel):
+    """The release a run was validated for and the files that defined it.
+
+    Optional on a record: records written before releases were configurable omit it and
+    mean July 2025 with the default configuration and manifest.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    tag: str
+    config_path: str
+    config_sha256: str | None
+    integrity_manifest: str
+    integrity_manifest_sha256: str | None
+
+
 class PipelineValidation(BaseModel):
     """Complete record of one full-pipeline validation."""
 
@@ -218,6 +228,7 @@ class PipelineValidation(BaseModel):
     scope: str = "CMS July 2025; supplied SAS artifacts only"
     full_pipeline_parity: bool
     human_review: Literal["not_recorded"] = "not_recorded"
+    release: ReleaseRecord | None = None
 
 
 def derive_status(
@@ -229,6 +240,11 @@ def derive_status(
     if artifacts_passed == TOTAL_ARTIFACTS and handoffs_passed:
         return "PASS"
     return "PARTIAL"
+
+
+def release_of(record: PipelineValidation) -> Release:
+    """The release a record was validated for; July 2025 when the record predates releases."""
+    return JULY_2025 if record.release is None else Release(tag=record.release.tag)
 
 
 def audit_policies(root: Path) -> list[str]:
@@ -293,9 +309,9 @@ def collect_environment(root: Path) -> dict[str, str]:
     }
 
 
-def _integrity(root: Path) -> dict[str, int | bool]:
+def _integrity(root: Path, release: Release) -> dict[str, int | bool]:
     try:
-        result = load_and_verify_integrity(root, root / INTEGRITY_PATH)
+        result = load_and_verify_integrity(root, root / release.integrity_manifest)
     except (OSError, ValueError):
         return {"passed": False, "expected_files": 0, "checked_files": 0}
     return {
@@ -369,11 +385,12 @@ def _result(
     )
 
 
-def _stage0(root: Path, stage: StageInput) -> StageResult:
+def _stage0(root: Path, stage: StageInput, release: Release) -> StageResult:
     directory = stage.output_directory
+    artifacts = release.program0_artifacts
     hashes: dict[str, str] = {}
     collection_hashes: dict[str, str] = {}
-    for name in PROGRAM0_ARTIFACTS:
+    for name in artifacts:
         path = find_output_file(directory, name)
         if path is not None and (digest := _hash_or_none(path)) is not None:
             hashes[name] = digest
@@ -381,8 +398,8 @@ def _stage0(root: Path, stage: StageInput) -> StageResult:
             collection_hashes[name] = sha256_file(path)
     # Files are hashed here and checked again inside the validator, so a change between
     # the two reads is reported. Absent files use a placeholder and report missing_outputs.
-    expected = {name: collection_hashes.get(name, "0" * 64) for name in PROGRAM0_ARTIFACTS}
-    validation = validate_program0_outputs(root, directory, expected)
+    expected = {name: collection_hashes.get(name, "0" * 64) for name in artifacts}
+    validation = validate_program0_outputs(root, directory, expected, release)
     program0_status: dict[str, StageStatus] = {
         "passed": "passed",
         "failed": "failed",
@@ -397,15 +414,15 @@ def _stage0(root: Path, stage: StageInput) -> StageResult:
         "Program 0",
         stage,
         status,
-        _outcomes(PROGRAM0_ARTIFACTS, dict(validation.artifact_results), errors),
+        _outcomes(artifacts, dict(validation.artifact_results), errors),
         errors,
         hashes,
     )
 
 
-def _stage1(root: Path, stage: StageInput, program0: StageInput) -> StageResult:
-    analysis = find_output_file(program0.output_directory, ANALYSIS_FILENAME)
-    validation = validate_program1_outputs(root, stage.output_directory, analysis)
+def _stage1(root: Path, stage: StageInput, program0: StageInput, release: Release) -> StageResult:
+    analysis = find_output_file(program0.output_directory, release.analysis_filename)
+    validation = validate_program1_outputs(root, stage.output_directory, analysis, release)
     errors = dict(validation.errors)
     result = _result(
         1,
@@ -420,22 +437,23 @@ def _stage1(root: Path, stage: StageInput, program0: StageInput) -> StageResult:
         or (None if analysis is not None else "Program 0 analysis output is missing"),
     )
     if analysis is not None and (digest := _hash_or_none(analysis)) is not None:
-        result.input_hashes[ANALYSIS_FILENAME] = digest
+        result.input_hashes[release.analysis_filename] = digest
     if result.status == "passed" and not result.handoff_passed:
         result.status = result.own_status = "handoff_failed"
     return result
 
 
-def _stage2(root: Path, stage: StageInput, program1: StageInput) -> StageResult:
+def _stage2(root: Path, stage: StageInput, program1: StageInput, release: Release) -> StageResult:
     directory = stage.output_directory
-    validation = validate_program2(root, directory)
+    artifacts = release.program2_artifacts
+    validation = validate_program2(root, directory, release)
     errors = dict(validation.errors)
     status: StageStatus
     if validation.status == "passed":
         status = "passed"
     elif validation.status == "failed":
         status = "failed"
-    elif all(find_output_file(directory, name) is None for name in PROGRAM2_ARTIFACTS):
+    elif all(find_output_file(directory, name) is None for name in artifacts):
         status = "missing_outputs"
     else:
         status = "malformed_outputs"
@@ -451,7 +469,7 @@ def _stage2(root: Path, stage: StageInput, program1: StageInput) -> StageResult:
                     raise ValueError(f"Program 1 output {filename} is missing")
                 (staged / filename).write_bytes(source.read_bytes())
                 input_hashes[filename] = sha256_file(staged / filename, normalize_text=False)
-            handoff.append(check_domain_passthrough(staged, directory))
+            handoff.append(check_domain_passthrough(staged, directory, release))
     except (OSError, ValueError, KeyError, ArtifactLoadError, ComparisonInputError) as error:
         handoff_error = f"{type(error).__name__}: {error}"
     if status == "passed" and (handoff_error or not all(item.passed for item in handoff)):
@@ -461,7 +479,7 @@ def _stage2(root: Path, stage: StageInput, program1: StageInput) -> StageResult:
         "Program 2",
         stage,
         status,
-        _outcomes(PROGRAM2_ARTIFACTS, dict(validation.comparisons), errors),
+        _outcomes(artifacts, dict(validation.comparisons), errors),
         errors,
         dict(validation.output_hashes),
         handoff=handoff,
@@ -477,6 +495,7 @@ def _load_pair(
     stage: int,
     outcome: ArtifactOutcome,
     directory: Path,
+    release: Release,
 ) -> tuple[LoadedArtifact, LoadedArtifact, Compare, str]:
     """Reload one artifact pair and the comparison function used to judge it."""
     name = outcome.artifact
@@ -485,18 +504,18 @@ def _load_pair(
         raise ValueError("output is missing")
     reference = paths.reference_sas7bdat[name]
     if stage == 0:
-        policy = load_program0_policies(root)[name]
+        policy = load_program0_policies(root, release)[name]
         key = policy.keys[0]
         actual, expected = load_artifact(path, key=key), load_artifact(reference, key=key)
-        if name == "MEASURE_AVERAGE_STDDEV_2025JUL":
-            return actual, expected, lambda a, e: _compare_statistics(a, e, policy), key
+        if name == release.artifact("MEASURE_AVERAGE_STDDEV"):
+            return actual, expected, lambda a, e: _compare_statistics(a, e, policy, release), key
     elif stage == 1:
-        policy = load_program1_policies(root)[name]
+        policy = load_program1_policies(root, release)[name]
         key = "PROVIDER_ID"
         actual, expected = load_artifact(path, key=key), load_artifact(reference, key=key)
     else:
-        policy = load_program2_policies(root)[name]
-        if name == "STAR_2025JUL":
+        policy = load_program2_policies(root, release)[name]
+        if name == release.artifact("STAR"):
             key = "PROVIDER_ID"
             actual, expected = load_artifact(path), load_artifact(reference, key=key)
         else:
@@ -570,6 +589,7 @@ def _handoff_location(
     stage_input: StageInput,
     program0: StageInput,
     program1: StageInput,
+    release: Release,
 ) -> tuple[str | None, str | None]:
     """Locate the first differing copied cell using the same exact rule as the check."""
     column = comparison.mismatched_columns[0] if comparison.mismatched_columns else None
@@ -579,7 +599,7 @@ def _handoff_location(
         domain = comparison.artifact.removesuffix("_INPUT_PASSTHROUGH")
         filename = next(name for name, art in PROGRAM1_ARTIFACTS.items() if art == domain)
         output = find_output_file(stage_input.output_directory, filename)
-        analysis = find_output_file(program0.output_directory, ANALYSIS_FILENAME)
+        analysis = find_output_file(program0.output_directory, release.analysis_filename)
         assert output is not None and analysis is not None
         return _first_exact_difference(
             column,
@@ -588,7 +608,7 @@ def _handoff_location(
         )
     domain = next(name for name, value in DOMAIN_SCORE_COLUMNS.items() if value == column)
     filename = next(name for name, art in PROGRAM1_ARTIFACTS.items() if art == domain)
-    star = find_output_file(stage_input.output_directory, "star_2025jul.csv")
+    star = find_output_file(stage_input.output_directory, release.star_filename)
     source = find_output_file(program1.output_directory, filename)
     assert star is not None and source is not None
     scores = load_artifact(source, key="PROVIDER_ID").frame
@@ -604,6 +624,7 @@ def locate_divergence(
     paths: ResolvedProjectPaths,
     result: StageResult,
     inputs: list[StageInput],
+    release: Release = JULY_2025,
 ) -> Divergence:
     """Find the first failing artifact of a failing stage and its first differing key/column."""
     stage_input = inputs[result.stage]
@@ -655,7 +676,7 @@ def locate_divergence(
         if column is not None:
             try:
                 actual, expected, compare, key_name = _load_pair(
-                    root, paths, result.stage, outcome, stage_input.output_directory
+                    root, paths, result.stage, outcome, stage_input.output_directory, release
                 )
                 key = _first_bad_key(actual, expected, compare, key_name, column)
             except (OSError, ValueError, KeyError, ArtifactLoadError, ComparisonInputError):
@@ -675,7 +696,9 @@ def locate_divergence(
         if comparison.passed:
             continue
         try:
-            key, column = _handoff_location(result, comparison, stage_input, inputs[0], inputs[1])
+            key, column = _handoff_location(
+                result, comparison, stage_input, inputs[0], inputs[1], release
+            )
         except (OSError, ValueError, KeyError, AssertionError, ArtifactLoadError):
             key, column = None, None
         return Divergence(
@@ -696,14 +719,18 @@ def locate_divergence(
     )
 
 
-def star_mismatch_count(root: Path, paths: ResolvedProjectPaths, directory: Path) -> int | None:
+def star_mismatch_count(
+    root: Path, paths: ResolvedProjectPaths, directory: Path, release: Release = JULY_2025
+) -> int | None:
     """Count SAS hospitals whose STAR differs or is absent; None if the file is unreadable."""
-    path = find_output_file(directory, "star_2025jul.csv")
+    path = find_output_file(directory, release.star_filename)
     if path is None:
         return None
     try:
         actual = load_artifact(path, key="PROVIDER_ID").frame
-        expected = load_artifact(paths.reference_sas7bdat["STAR_2025JUL"], key="PROVIDER_ID").frame
+        expected = load_artifact(
+            paths.reference_sas7bdat[release.artifact("STAR")], key="PROVIDER_ID"
+        ).frame
         merged = expected.loc[:, ["PROVIDER_ID", "STAR"]].merge(
             actual.loc[:, ["PROVIDER_ID", "STAR"]],
             on="PROVIDER_ID",
@@ -724,16 +751,23 @@ def validate_pipeline(
     program0: StageInput,
     program1: StageInput,
     program2: StageInput,
+    release: Release = JULY_2025,
 ) -> PipelineValidation:
-    """Validate all ten artifacts across the chain and return an explicit summary."""
+    """Validate all ten artifacts across the chain and return an explicit summary.
+
+    ``release`` names the artifacts and the configuration and integrity manifest to use.
+    Policy tolerances are the committed ones for every release (see ``audit_policies``).
+    """
     root = project_root.resolve()
-    integrity_before = _integrity(root)
+    integrity_before = _integrity(root, release)
     audit = audit_policies(root)
-    paths = load_project_configuration(root / CONFIG_PATH, project_root=root).resolve_paths(root)
+    paths = load_project_configuration(root / release.config_path, project_root=root).resolve_paths(
+        root
+    )
     inputs = [program0, program1, program2]
 
-    stages = [_stage0(root, program0), _stage1(root, program1, program0)]
-    stages.append(_stage2(root, program2, program1))
+    stages = [_stage0(root, program0, release), _stage1(root, program1, program0, release)]
+    stages.append(_stage2(root, program2, program1, release))
     stages[0].source_hashes = _source_hashes(
         root, program0, ("src/sasguard/program0.py", "src/sasguard/verification/program0.py")
     )
@@ -756,17 +790,17 @@ def validate_pipeline(
         if stage.own_status == "passed":
             continue
         if earliest is None:
-            earliest = locate_divergence(root, paths, stage, inputs)
+            earliest = locate_divergence(root, paths, stage, inputs, release)
         else:
             stage.status = "upstream_failure"
 
-    integrity_after = _integrity(root)
+    integrity_after = _integrity(root, release)
     integrity_passed = bool(integrity_before["passed"]) and bool(integrity_after["passed"])
     if earliest is None and not integrity_passed:
         earliest = Divergence(
             stage=-1,
             program="integrity",
-            artifact=INTEGRITY_PATH,
+            artifact=release.integrity_manifest,
             kind="integrity",
             detail="protected files changed or could not be verified",
         )
@@ -791,7 +825,7 @@ def validate_pipeline(
         status=status,
         artifacts_passed=artifacts_passed,
         passed_by_program={f"program{s.stage}": s.artifacts_passed for s in stages},
-        star_mismatches=star_mismatch_count(root, paths, program2.output_directory),
+        star_mismatches=star_mismatch_count(root, paths, program2.output_directory, release),
         stages=stages,
         earliest_divergence=earliest,
         integrity_before=integrity_before,
@@ -807,21 +841,29 @@ def validate_pipeline(
                 paths.reference_sas7bdat[name]
             )
             for name in (
-                *PROGRAM0_ARTIFACTS.values(),
+                *release.program0_artifacts.values(),
                 *PROGRAM1_ARTIFACTS.values(),
-                *PROGRAM2_ARTIFACTS.values(),
+                *release.program2_artifacts.values(),
             )
         },
         environment=environment,
         environment_sha256=sha256(json.dumps(environment, sort_keys=True).encode()).hexdigest(),
         full_pipeline_parity=status == "PASS",
+        release=ReleaseRecord(
+            tag=release.tag,
+            config_path=release.config_path,
+            config_sha256=_hash_or_none(root / release.config_path),
+            integrity_manifest=release.integrity_manifest,
+            integrity_manifest_sha256=_hash_or_none(root / release.integrity_manifest),
+        ),
+        scope=f"CMS {release.label}; supplied SAS artifacts only",
     )
 
 
 def render_summary(result: PipelineValidation) -> str:
     """Human-readable summary that states parity only for a full PASS."""
     parity = (
-        "established for the supplied July 2025 SAS artifacts"
+        f"established for the supplied {release_of(result).label} SAS artifacts"
         if result.full_pipeline_parity
         else "NOT established"
     )

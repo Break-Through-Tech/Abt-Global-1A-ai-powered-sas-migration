@@ -13,15 +13,13 @@ from pydantic import BaseModel, Field, JsonValue
 from sasguard.config import load_project_configuration
 from sasguard.data import ArtifactFormat, LoadedArtifact, load_artifact
 from sasguard.provenance.hashing import hash_files, sha256_file
+from sasguard.release import JULY_2025, Release
 from sasguard.verification import ArtifactComparisonPolicy, compare_artifacts
 from sasguard.verification.artifact import ArtifactComparison
 from sasguard.verification.policy import ColumnComparisonPolicy, ComparisonKind
 
 POLICY_PATH = "configs/program2-comparison-policies.json"
-ARTIFACTS = {
-    "star_2025jul.csv": "STAR_2025JUL",
-    "national_average_2025jul.csv": "NATIONAL_AVERAGE_2025JUL",
-}
+ARTIFACTS = JULY_2025.program2_artifacts
 
 
 class Program2Validation(BaseModel):
@@ -35,18 +33,24 @@ class Program2Validation(BaseModel):
     input_passthrough: ArtifactComparison | None = None
 
 
-def load_program2_policies(root: Path) -> dict[str, ArtifactComparisonPolicy]:
-    """Load a policy fixed before generation, with exact categorical/count decisions."""
+def load_program2_policies(
+    root: Path, release: Release = JULY_2025
+) -> dict[str, ArtifactComparisonPolicy]:
+    """Load a policy fixed before generation, keyed for ``release`` by role."""
     value = json.loads((root / POLICY_PATH).read_bytes())
     if value.get("schema_version") != 1 or set(value["artifacts"]) != set(ARTIFACTS.values()):
         raise ValueError("Program 2 policies must cover both target artifacts")
-    return {
-        name: ArtifactComparisonPolicy.model_validate(rule)
-        for name, rule in value["artifacts"].items()
-    }
+    return release.policies_by_release_artifact(
+        {
+            name: ArtifactComparisonPolicy.model_validate(rule)
+            for name, rule in value["artifacts"].items()
+        }
+    )
 
 
-def check_domain_passthrough(inputs: Path, output: Path) -> ArtifactComparison:
+def check_domain_passthrough(
+    inputs: Path, output: Path, release: Release = JULY_2025
+) -> ArtifactComparison:
     """Require copied domain scores to equal the actual input, independently of SAS tolerance."""
     mapping = {
         "OUTCOME_MORTALITY": "STD_OUTCOMES_MORTALITY_SCORE",
@@ -65,7 +69,7 @@ def check_domain_passthrough(inputs: Path, output: Path) -> ArtifactComparison:
             else combined.merge(selected, on="PROVIDER_ID", how="outer", validate="one_to_one")
         )
     assert combined is not None
-    actual = load_artifact(output / "star_2025jul.csv", key="PROVIDER_ID")
+    actual = load_artifact(output / release.star_filename, key="PROVIDER_ID")
     columns = ["PROVIDER_ID", *mapping.values()]
     return compare_artifacts(
         replace(actual, frame=actual.frame.loc[:, columns]),
@@ -83,24 +87,25 @@ def check_domain_passthrough(inputs: Path, output: Path) -> ArtifactComparison:
     )
 
 
-def validate_program2(root: Path, output: Path) -> Program2Validation:
+def validate_program2(root: Path, output: Path, release: Release = JULY_2025) -> Program2Validation:
     """Compare data on the host; return only aggregate feedback to the model.
 
     National averages have one row and no natural key. A host-only row index aligns
     those rows without asking generated code to add a column. Extra rows still fail.
     Raw provider identifiers, values, logs, and exceptions never enter feedback.
     """
-    paths = load_project_configuration(
-        root / "configs/cms_2025jul.yaml", project_root=root
-    ).resolve_paths(root)
-    policies = load_program2_policies(root)
+    paths = load_project_configuration(root / release.config_path, project_root=root).resolve_paths(
+        root
+    )
+    policies = load_program2_policies(root, release)
+    artifacts = release.program2_artifacts
     frozen = hash_files(
         root,
         [
             POLICY_PATH,
             *[
                 paths.reference_sas7bdat[name].relative_to(root).as_posix()
-                for name in ARTIFACTS.values()
+                for name in artifacts.values()
             ],
         ],
     )
@@ -108,7 +113,7 @@ def validate_program2(root: Path, output: Path) -> Program2Validation:
     errors = {}
     hashes = {}
     feedback: dict[str, JsonValue] = {}
-    for filename, name in ARTIFACTS.items():
+    for filename, name in artifacts.items():
         reference = paths.reference_sas7bdat[name]
         _, metadata = pyreadstat.read_sas7bdat(reference, metadataonly=True)
         columns = [column.upper() for column in metadata.column_names]
@@ -117,7 +122,7 @@ def validate_program2(root: Path, output: Path) -> Program2Validation:
             "expected_rows": metadata.number_rows,
             "comparison_policy": cast(JsonValue, policies[name].model_dump(mode="json")),
         }
-        if name == "NATIONAL_AVERAGE_2025JUL":
+        if name == release.artifact("NATIONAL_AVERAGE"):
             details["comparison_policy"] = {
                 "row_alignment": "single row; no generated key column",
                 "numeric_tolerance": {"absolute": 1e-12, "relative": 1e-12},
@@ -129,7 +134,7 @@ def validate_program2(root: Path, output: Path) -> Program2Validation:
             before = sha256_file(path, normalize_text=False)
             actual = load_artifact(path)
             expected = load_artifact(
-                reference, key="PROVIDER_ID" if name == "STAR_2025JUL" else None
+                reference, key="PROVIDER_ID" if name == release.artifact("STAR") else None
             )
             details.update(
                 {
@@ -140,7 +145,7 @@ def validate_program2(root: Path, output: Path) -> Program2Validation:
                     "unexpected_column_count": len(set(actual.columns) - set(columns)),
                 }
             )
-            if name == "NATIONAL_AVERAGE_2025JUL":
+            if name == release.artifact("NATIONAL_AVERAGE"):
                 if "__SASGUARD_ROW" in actual.columns:
                     raise ValueError("reserved host row key supplied by candidate")
                 actual = replace(
