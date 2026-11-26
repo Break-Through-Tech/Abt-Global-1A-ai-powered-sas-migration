@@ -14,12 +14,20 @@ sasguard validate-pipeline --run-human-references \
   --program2-output PROGRAM2_OUTPUT_DIR --program2-source helper_assisted_model_output
 ```
 
+To run all three stages locally with no supplied outputs, use the Program 2 reference
+implementation (see [the labeling caveat](#program-2-reference-implementation)):
+
+```text
+sasguard validate-pipeline --run-human-references --run-reference-program2
+```
+
 The command is the same in PowerShell and zsh apart from line continuation. Other
 combinations:
 
 | Stages | Options |
 |---|---|
 | Program 0 and Program 1 from the human references | `--run-human-references` |
+| Program 2 reference run on the Program 0 and 1 outputs | `--run-reference-program2` (with `--run-human-references`, or with supplied Program 0 and 1 outputs) |
 | Supplied Program 0, human Program 1 run on it | `--program0-output DIR --program0-source SOURCE --run-human-program1` |
 | All three stages supplied | `--program0-output`, `--program0-source`, `--program1-output`, `--program1-source`, `--program2-output`, `--program2-source` |
 
@@ -29,12 +37,29 @@ explicit and is stored as one flag per origin. Optional `--programN-code FILE` r
 hash of a candidate file, and `--program2-note` records free text.
 Supplied directories hold CSVs named like the SAS artifacts
 (`less100_measure.csv`, `outcome_mortality.csv`, `star_2025jul.csv`, and so on). Program 1
-file names are matched ignoring case. No complete human-written Program 2 exists in this
-repository, so Program 2 output must come from a model candidate run (for example from
-`model-program2` or the [STRICT replay](experiments/2026-11-16-program2-strict-replay.md)).
+file names are matched ignoring case. No team-member-written Program 2 exists in this
+repository. Program 2 output comes either from the reference implementation below or from a
+model candidate run (for example `model-program2` or the
+[STRICT replay](experiments/2026-11-16-program2-strict-replay.md)).
 
 The record is written to a new `reports/runs/pipeline-*` directory as
 `pipeline-validation.json` and `summary.md`. The exit code is 0 only for `PASS`.
+
+## Program 2 reference implementation
+
+`reference_python/program2.py` implements Program 2 (weights and summary score, `%report`
+counts and eligibility, `%kmeans`, national averages). It reads only the Program 1 CSVs and
+Program 0's `std_data_2025jul_analysis.csv`, never trusted SAS outputs, and reuses the
+FASTCLUS helpers in `src/sasguard/semantics`. Those helpers raise
+`UnresolvedSASBehavior` on exact ties, empty clusters and MAXITER instead of picking a rule.
+
+**Labeling caveat.** This file was not written by a team member and is pending teammate
+review. With `--run-reference-program2` the stage is therefore recorded as
+`helper_assisted_model_output` (the FASTCLUS helpers are used) with the note "Program 2
+reference implementation pending teammate review", and the file's hash is recorded in
+`source_hashes`. `--program2-source human_reference` is accepted only when explicitly
+passed, which should happen after the review is recorded. Other source labels are rejected
+with this flag. A `PASS` is therefore not a "human Program 2" result.
 
 ## What is checked
 
@@ -127,14 +152,23 @@ after pulling source changes, because an older image can lack current helpers.
 
 On the human references, `--run-human-references` produced Program 0 and Program 1 output
 on the supplied July 2025 input. Program 0 passed 3/3 and Program 1 passed 5/5, with the
-Program 1 handoff exact and 29/29 protected files verified before and after. No Program 2
-output exists to chain, so the status is `PARTIAL` (8 of 10), earliest divergence
-Program 2 `STAR_2025JUL`, missing output. This is the honest result. The teammate replays
-reported 10/10 with a Program 0 model candidate and a manually corrected Program 2
-candidate; this command has not re-run those candidates.
+Program 1 handoff exact and 29/29 protected files verified before and after. Without a
+Program 2 output the status is `PARTIAL` (8 of 10), earliest divergence Program 2
+`STAR_2025JUL`, missing output.
+
+With `--run-reference-program2` the full local chain reached `PASS`, 10 of 10: Program 0
+3/3, Program 1 5/5, Program 2 2/2 (source `helper_assisted_model_output`), both handoffs
+exact, 0 STAR mismatches, 29/29 protected files before and after. No
+`UnresolvedSASBehavior` occurred on the real data (no exact ties, empty clusters or
+MAXITER stops), and no tolerance, policy or data file was changed. The largest numeric
+difference on Program 2 was about 1.8e-13. This is one July 2025 result against the
+supplied SAS artifacts. It is consistent with the STRICT behavior in
+[fastclus-iteration](fastclus-iteration.md), not a confirmation from SAS itself.
 
 Remaining work:
 
+* Teammate review of `reference_python/program2.py`, after which `human_reference` may be
+  used.
 * An independent replay of this command on a clean checkout and runner image.
 * Chained runs of the Program 0 and Program 2 model candidates from #68 and #70 (direct
   and helper-assisted), recorded with the correct source flag.

@@ -28,6 +28,13 @@ means the docs don't say, so the helper raises `UnresolvedSASBehavior`.
 | Hitting MAXITER before the seeds settle | Unresolved |
 | A hospital exactly halfway between two seeds | Unresolved |
 
+On the real July 2025 data, `program2_two_pass` (STRICT-excluded points leave the center
+updates, signed labels, `abs()` star join) was run by the Program 2 reference through the
+full pipeline: all three peer groups converged without ties, empty clusters or MAXITER, and
+stars matched the supplied SAS artifact with 0 mismatches. That is consistent with July 2025
+SAS outputs; the table above is unchanged because this is one data set, not SAS
+documentation or a SAS run.
+
 For Program 2, seed replacement probably never happens: each pass has at most five
 different seed values and five clusters, so every value just becomes a seed. It
 would only matter if two quintile medians were the same, which currently raises.
