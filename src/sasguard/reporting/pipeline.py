@@ -343,13 +343,28 @@ def read_pipeline_report(project_root: Path, run_directory: Path) -> PipelineRun
             f"{divergence.detail}"
         )
     )
-    # The CMS draft names no provider; the key stays in the technical record.
+    # The CMS draft names no provider and no header that a candidate output could have
+    # introduced: only columns from the SAS reference schema are shown. The key and any
+    # unexpected header stay in the technical record.
+    trusted_columns = {
+        column.upper()
+        for stage in record.stages
+        for outcome in stage.artifacts
+        if outcome.comparison is not None
+        for column in outcome.comparison.expected_columns
+    }
+    if divergence is None or not divergence.column:
+        column_cms = "n/a"
+    elif divergence.column.upper() in trusted_columns:
+        column_cms = divergence.column
+    else:
+        column_cms = "not in the SAS schema (named in the technical record)"
     divergence_cms = (
         None
         if divergence is None
         else _clean(
             f"{divergence.program}, artifact {divergence.artifact}, {divergence.kind}; "
-            f"column {divergence.column or 'n/a'}. "
+            f"column {column_cms}. "
             + (
                 divergence.detail
                 if _fixed_wording(divergence.kind, divergence.detail)

@@ -66,7 +66,11 @@ file, record that with `--program2-reviewed-by "<name>"`. The review is stored i
 `report-run` only labels a run `VERIFIED` when every stage's recorded outputs are present
 in the run directory and re-hash to the recorded values. A missing or partly re-checked
 stage folder makes the report `NOT VERIFIED` and withholds hospital totals. The CMS summary
-never names a provider; the first differing key stays in the technical record.
+never names a provider and shows a column only if it is in the SAS reference schema; the
+first differing key and any unexpected header stay in the technical record.
+
+With `--run-reference-program2` the record always hashes the bundled
+`reference_python/program2.py`, the code that ran; `--program2-code` is rejected.
 
 ## What is checked
 

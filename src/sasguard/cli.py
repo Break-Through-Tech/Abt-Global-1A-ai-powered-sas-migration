@@ -390,6 +390,13 @@ def validate_pipeline_command(
     if run_reference_program2 and program2_output:
         typer.echo("--run-reference-program2 cannot be combined with --program2-output.", err=True)
         raise typer.Exit(code=2)
+    if run_reference_program2 and program2_code is not None:
+        typer.echo(
+            "--run-reference-program2 always records the hash of the bundled "
+            f"{PROGRAM2_REFERENCE}, the code that runs; --program2-code cannot override it.",
+            err=True,
+        )
+        raise typer.Exit(code=2)
     if run_reference_program2 and program2_source is not None:
         typer.echo(
             "--run-reference-program2 records its origin as helper_assisted_model_output; "
@@ -418,7 +425,7 @@ def validate_pipeline_command(
             program2_output = run / "program2"
             produce_program2(root, program0_output, program1_output, program2_output)
             program2_source = StageSource.HELPER_ASSISTED_MODEL_OUTPUT
-            program2_code = program2_code or root / PROGRAM2_REFERENCE
+            program2_code = root / PROGRAM2_REFERENCE
             if not program2_note:
                 program2_note = (
                     REFERENCE_PROGRAM2_REVIEWED_NOTE

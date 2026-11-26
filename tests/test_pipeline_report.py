@@ -252,3 +252,19 @@ def test_recorded_review_is_shown_without_changing_the_origin(chain: Path, tmp_p
     assert "reviewed by A. Teammate" in cms
     assert "no recorded human review" not in cms
     assert "Human review: recorded for" in technical
+
+
+def test_cms_summary_hides_unexpected_headers(chain: Path, tmp_path: Path) -> None:
+    def add_header(run: Path) -> None:
+        path = run / "program1" / "process.csv"
+        frame = load_artifact(path, key="PROVIDER_ID").frame
+        frame["010001"] = 1.0
+        _write(frame, path)
+
+    run = saved_run(chain, tmp_path, before_validate=add_header)
+    record = json.loads((run / "pipeline-validation.json").read_text())
+    assert record["earliest_divergence"]["column"] == "010001"
+    _, cms, technical = report(tmp_path, run)
+    assert "010001" not in cms
+    assert "not in the SAS schema" in cms
+    assert "column 010001" in technical

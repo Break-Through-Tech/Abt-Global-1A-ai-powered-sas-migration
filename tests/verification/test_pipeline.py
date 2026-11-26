@@ -21,6 +21,7 @@ from sasguard.cli import app
 from sasguard.config import load_project_configuration
 from sasguard.data import load_artifact
 from sasguard.prototypes.pipeline_reference import run_human_program0, run_human_program1
+from sasguard.provenance.hashing import sha256_file
 from sasguard.verification.pipeline import (
     DOMAIN_SCORE_COLUMNS,
     StageInput,
@@ -529,6 +530,17 @@ def test_reference_program2_origin_cannot_be_relabelled_human() -> None:
         shutil.rmtree(run_directory, ignore_errors=True)
 
 
+def test_reference_program2_records_the_bundled_code_hash_only(tmp_path: Path) -> None:
+    other = tmp_path / "other.py"
+    other.write_text("print('not what runs')\n", encoding="utf-8")
+    outcome, run_directory = invoke_reference_program2("--program2-code", str(other))
+    try:
+        assert outcome.exit_code == 2
+        assert not (run_directory / "pipeline-validation.json").exists()
+    finally:
+        shutil.rmtree(run_directory, ignore_errors=True)
+
+
 def test_reference_program2_review_is_recorded_separately_from_origin() -> None:
     outcome, run_directory = invoke_reference_program2("--program2-reviewed-by", "A. Teammate")
     try:
@@ -537,6 +549,8 @@ def test_reference_program2_review_is_recorded_separately_from_origin() -> None:
         program2 = record["stages"][2]
         assert program2["source"] == "helper_assisted_model_output"
         assert program2["reviewed_by"] == "A. Teammate"
+        bundled = sha256_file(ROOT / "reference_python/program2.py", normalize_text=False)
+        assert program2["source_hashes"]["candidate:program2.py"] == bundled
         assert "pending teammate review" not in program2["note"]
     finally:
         shutil.rmtree(run_directory, ignore_errors=True)
