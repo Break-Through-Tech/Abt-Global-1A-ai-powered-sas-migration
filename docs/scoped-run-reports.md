@@ -80,6 +80,36 @@ Exit code 2 means the input was unsupported, malformed, missing, or could not be
 Read `scope_status` and `pipeline_status` in the output rather than treating report generation
 as a correctness test.
 
+## Full-pipeline validation runs
+
+`report-run` also accepts a `validate-pipeline` run directory (one holding
+`pipeline-validation.json`). It reads only that record and re-hashes the stage output files
+that are inside the run directory (for `--run-human-references` runs, `program0/`,
+`program1/` and, when supplied there, `program2/`). It reruns nothing. The `handoff.md` file
+is the CMS summary, `technical.md` is the Abt record, and `report.json` has
+`report_kind` `pipeline`.
+
+Labels: `VERIFIED` only for record status PASS (all ten artifacts, both handoffs, policy audit,
+integrity 29/29 before and after) with a record that agrees with itself and its files.
+`NOT VERIFIED` for PARTIAL. `FAILED` for FAIL,
+or when the record cannot be confirmed: a recorded output file changed or vanished, the status
+or parity flag disagrees with the recorded artifact results, or `summary.md` was edited. A
+tampered run never renders as a pass. Star distribution appears only for `VERIFIED` runs.
+Hospital counts come from `star_2025jul.csv` only when it is in the run directory and its hash
+matches the record; otherwise the report says counts are unavailable.
+
+The CMS summary lists each stage's code origin (human reference, direct model output,
+helper-assisted model output, or manually corrected model output), what was verified against
+supplied SAS and what was only trusted, and what was not checked. The Abt record adds the
+per-artifact table (rows, columns, mismatched cells, policy file), handoff results, earliest
+divergence, integrity before and after, policy audit, all recorded hashes, and an allowlist of
+environment fields. Free-text notes and environment values are redacted for key-like strings;
+this is not a general secret scanner.
+
+Not recorded and shown as such: the run command, human review, and a run date (the file
+modification time of the record is used and labelled as such). Abt has not yet confirmed the
+final field list for this handoff.
+
 ## Claims and trust boundary
 
 The report separates code origin, model generation, execution, deterministic comparison, and
@@ -106,7 +136,8 @@ stricter policy ran. The technical section identifies that policy as `legacy_inf
 the source record has no named contract. Separate reassessment results require a future
 adapter, not a relabeling of the original attempt.
 
-Full-pipeline status is always `NOT VERIFIED` in this first version. Hospital processing and
+For Mortality, synthetic and Program 0 runs, full-pipeline status is always `NOT VERIFIED`.
+Hospital processing and
 eligibility totals and final ratings stay null. Artifact row counts are shown only as artifact
 row counts. The original command is not reconstructed from logs or reported as known when
 the source record never stored it. First observed failures identify artifact checkpoints,

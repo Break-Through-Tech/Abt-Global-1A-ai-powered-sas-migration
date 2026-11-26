@@ -290,7 +290,11 @@ def write_run_report(
     """Write a new report directory, never overwrite source records or existing output."""
     root = project_root.resolve()
     run = (run_directory if run_directory.is_absolute() else root / run_directory).resolve()
-    report = read_run_report(root, run)
+    # Imported lazily: the pipeline validator imports modules that import this package.
+    from sasguard.reporting.pipeline import is_pipeline_run, write_pipeline_report
+
+    pipeline = is_pipeline_run(run)
+    report = None if pipeline else read_run_report(root, run)
     target = output_directory or Path("reports/runs") / f"handoff-{uuid4()}"
     target = (target if target.is_absolute() else root / target).resolve()
     if (
@@ -302,6 +306,9 @@ def write_run_report(
             "report output must be a separate new directory directly under reports/runs"
         )
     target.mkdir(parents=True, exist_ok=False)
+    if report is None:
+        write_pipeline_report(root, run, target)
+        return target
     payload = report.model_dump(mode="json")
     payload["scope_status"] = report.scope_status.value
     payload["pipeline_status"] = "NOT VERIFIED"
