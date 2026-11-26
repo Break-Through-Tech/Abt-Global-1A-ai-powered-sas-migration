@@ -114,6 +114,13 @@ def test_pass_run_is_verified_with_counts_and_distribution(chain: Path, tmp_path
     assert "Human review: not recorded" in technical
 
 
+def test_cms_summary_carries_stage_notes_and_review_caveat(chain: Path, tmp_path: Path) -> None:
+    run = saved_run(chain, tmp_path, note="Program 2 reference implementation pending review")
+    _, cms, _ = report(tmp_path, run)
+    assert "Program 2 reference implementation pending review" in cms
+    assert "no recorded human review" in cms
+
+
 def test_partial_run_is_not_verified_and_has_no_distribution(chain: Path, tmp_path: Path) -> None:
     run = saved_run(chain, tmp_path, keep_program2=False)
     data, cms, technical = report(tmp_path, run)

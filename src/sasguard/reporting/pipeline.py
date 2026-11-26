@@ -378,13 +378,27 @@ def render_pipeline_handoff(report: PipelineRunReport) -> str:
             "star ratings and must not be used as such."
         )
     lines.extend(
-        ["", "## Stages and code origin", "", "| Stage | Code origin | Result |", "|---|---|---|"]
+        [
+            "",
+            "## Stages and code origin",
+            "",
+            "| Stage | Code origin | Result | Note |",
+            "|---|---|---|---|",
+        ]
     )
     lines.extend(
         f"| {_md(s.program)} | {_md(s.code_origin)} | {_md(s.status)} "
-        f"({s.artifacts_passed}/{s.artifacts_total} artifacts) |"
+        f"({s.artifacts_passed}/{s.artifacts_total} artifacts) | {_md(s.note) or 'none'} |"
         for s in report.stages
     )
+    if any(s.code_origin != ORIGINS["human_reference"] for s in report.stages):
+        lines.extend(
+            [
+                "",
+                "Stages not marked as human reference were not written by a team member and "
+                "have no recorded human review. A matching result does not replace that review.",
+            ]
+        )
     lines.extend(["", "## Hospitals", ""])
     if report.hospitals_processed is None:
         lines.append("Hospital counts are unavailable. " + _md(report.counts_note))
