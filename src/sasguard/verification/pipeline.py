@@ -738,7 +738,9 @@ def validate_pipeline(
         ("reference_python/domain_scoring.py", "src/sasguard/verification/program1.py"),
     )
     stages[2].source_hashes = _source_hashes(
-        root, program2, ("src/sasguard/verification/program2.py",)
+        root,
+        program2,
+        ("reference_python/program2.py", "src/sasguard/verification/program2.py"),
     )
     stages[0].input_hashes[paths.input_sas7bdat.relative_to(root).as_posix()] = sha256_file(
         paths.input_sas7bdat

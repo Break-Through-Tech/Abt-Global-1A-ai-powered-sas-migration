@@ -20,8 +20,10 @@ from sasguard.program0 import translate_program0
 from sasguard.prototypes.local_model import run_local_model_smoke, run_local_model_suite
 from sasguard.prototypes.local_model_reassessment import reassess_local_model_suite
 from sasguard.prototypes.mortality import run_mortality_prototype
+from sasguard.prototypes.pipeline_reference import PROGRAM2_REFERENCE
 from sasguard.prototypes.pipeline_reference import run_human_program0 as produce_program0
 from sasguard.prototypes.pipeline_reference import run_human_program1 as produce_program1
+from sasguard.prototypes.pipeline_reference import run_human_program2 as produce_program2
 from sasguard.prototypes.program0_model import ModelSettings, run_program0_model
 from sasguard.prototypes.program0_prompt import (
     PromptInputFormat,
@@ -296,14 +298,29 @@ def program01_chain_command(
         raise typer.Exit(code=1)
 
 
+REFERENCE_PROGRAM2_NOTE = "Program 2 reference implementation pending teammate review"
+
+
 @app.command("validate-pipeline")
 def validate_pipeline_command(
     program2_output: Annotated[
-        Path, typer.Option(help="Directory with the actual Program 2 output CSVs.")
-    ],
+        Path | None, typer.Option(help="Directory with the actual Program 2 output CSVs.")
+    ] = None,
     program2_source: Annotated[
-        StageSource, typer.Option(help="Where the Program 2 output came from.")
-    ],
+        StageSource | None,
+        typer.Option(
+            help="Where the Program 2 output came from. With --run-reference-program2 this "
+            "defaults to helper_assisted_model_output; human_reference only if passed."
+        ),
+    ] = None,
+    run_reference_program2: Annotated[
+        bool,
+        typer.Option(
+            "--run-reference-program2",
+            help="Produce Program 2 output from reference_python/program2.py (pending "
+            "teammate review) on the Program 0 and Program 1 outputs.",
+        ),
+    ] = False,
     run_human_references: Annotated[
         bool,
         typer.Option(
@@ -362,6 +379,20 @@ def validate_pipeline_command(
     if run_human_program1 and program1_output:
         typer.echo("--run-human-program1 cannot be combined with --program1-output.", err=True)
         raise typer.Exit(code=2)
+    if run_reference_program2 and program2_output:
+        typer.echo("--run-reference-program2 cannot be combined with --program2-output.", err=True)
+        raise typer.Exit(code=2)
+    if run_reference_program2 and program2_source not in (
+        None,
+        StageSource.HELPER_ASSISTED_MODEL_OUTPUT,
+        StageSource.HUMAN_REFERENCE,
+    ):
+        typer.echo(
+            "--run-reference-program2 allows only helper_assisted_model_output (default) "
+            "or human_reference as --program2-source.",
+            err=True,
+        )
+        raise typer.Exit(code=2)
     try:
         run.mkdir(parents=True)
         if run_human_references:
@@ -378,6 +409,15 @@ def validate_pipeline_command(
             raise ValueError("Program 0 needs --program0-output and --program0-source")
         if program1_output is None or program1_source is None:
             raise ValueError("Program 1 needs --program1-output and --program1-source")
+        if run_reference_program2:
+            program2_output = run / "program2"
+            produce_program2(root, program0_output, program1_output, program2_output)
+            program2_source = program2_source or StageSource.HELPER_ASSISTED_MODEL_OUTPUT
+            program2_code = program2_code or root / PROGRAM2_REFERENCE
+            if not program2_note:
+                program2_note = REFERENCE_PROGRAM2_NOTE
+        if program2_output is None or program2_source is None:
+            raise ValueError("Program 2 needs --program2-output and --program2-source")
         result = validate_pipeline(
             root,
             StageInput(

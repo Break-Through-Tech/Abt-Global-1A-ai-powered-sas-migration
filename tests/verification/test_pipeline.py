@@ -484,3 +484,73 @@ def test_command_rejects_output_outside_reports_runs(tmp_path: Path) -> None:
         ],
     )
     assert outcome.exit_code == 2
+
+
+def invoke_reference_program2(*extra: str) -> tuple[object, Path]:
+    run_directory = ROOT / "reports" / "runs" / f"pipeline-test-{uuid.uuid4()}"
+    outcome = CliRunner().invoke(
+        app,
+        [
+            "validate-pipeline",
+            "--run-human-references",
+            "--run-reference-program2",
+            "--output-directory",
+            str(run_directory),
+            *extra,
+        ],
+    )
+    return outcome, run_directory
+
+
+def test_reference_program2_defaults_to_helper_assisted_label() -> None:
+    outcome, run_directory = invoke_reference_program2()
+    try:
+        assert outcome.exit_code == 0, outcome.output
+        record = json.loads((run_directory / "pipeline-validation.json").read_text("utf-8"))
+        assert record["status"] == "PASS"
+        assert record["passed_by_program"] == {"program0": 3, "program1": 5, "program2": 2}
+        program2 = record["stages"][2]
+        assert program2["source"] == "helper_assisted_model_output"
+        assert program2["helper_assisted_model_output"] is True
+        assert program2["human_reference"] is False
+        assert "pending teammate review" in program2["note"]
+        assert "candidate:program2.py" in program2["source_hashes"]
+        assert (run_directory / "program2/star_2025jul.csv").is_file()
+    finally:
+        shutil.rmtree(run_directory, ignore_errors=True)
+
+
+def test_reference_program2_is_human_reference_only_when_requested() -> None:
+    outcome, run_directory = invoke_reference_program2("--program2-source", "human_reference")
+    try:
+        assert outcome.exit_code == 0, outcome.output
+        record = json.loads((run_directory / "pipeline-validation.json").read_text("utf-8"))
+        assert record["stages"][2]["source"] == "human_reference"
+    finally:
+        shutil.rmtree(run_directory, ignore_errors=True)
+
+
+def test_reference_program2_rejects_model_source_labels() -> None:
+    outcome, run_directory = invoke_reference_program2("--program2-source", "direct_model_output")
+    try:
+        assert outcome.exit_code == 2
+        assert not (run_directory / "pipeline-validation.json").exists()
+    finally:
+        shutil.rmtree(run_directory, ignore_errors=True)
+
+
+def test_command_requires_program2_output_without_the_reference_flag() -> None:
+    run_directory = ROOT / "reports" / "runs" / f"pipeline-test-{uuid.uuid4()}"
+    try:
+        outcome = CliRunner().invoke(
+            app,
+            [
+                "validate-pipeline",
+                "--run-human-references",
+                "--output-directory",
+                str(run_directory),
+            ],
+        )
+        assert outcome.exit_code == 2
+    finally:
+        shutil.rmtree(run_directory, ignore_errors=True)
