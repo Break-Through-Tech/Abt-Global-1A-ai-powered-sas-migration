@@ -144,6 +144,27 @@ To validate all ten Program 0, 1 and 2 artifacts as one chain of actual Python o
 `sasguard validate-pipeline` (PASS, PARTIAL or FAIL, with the earliest divergence), see
 [Full-pipeline validation](docs/full-pipeline-validation.md).
 
+To run the full pipeline demo end to end (setup for Windows PowerShell and macOS zsh, the
+ordered script, a deliberately wrong result, a recorded repair attempt, reports, limits and
+troubleshooting), see the [November demo runbook](docs/demo-runbook.md).
+
+Full-pipeline commands, run from an activated host environment:
+
+```text
+sasguard validate-pipeline --run-human-references --run-reference-program2
+sasguard report-run reports/runs/pipeline-<UUID>
+```
+
+The first checks all ten artifacts and prints the `Evidence:` directory; the second writes the
+`handoff.md` (CMS summary), `technical.md` (Abt) and `report.json` drafts from that record.
+`--run-reference-program2` uses a Program 2 reference implementation that is pending teammate
+review, so its stage is labeled `helper_assisted_model_output`, not human and not approved CMS
+ratings. Other source options are in [Full-pipeline validation](docs/full-pipeline-validation.md).
+
+Open decisions and issue status: the paid-model budget decision is a
+[draft](docs/model-budget-decision.md) (no model runs are authorized), and
+[Issue close-out](docs/issue-closeout.md) lists what each open issue still needs.
+
 For bounded Program 2 model translation and comparison of stars and national averages,
 see [Program 2 model workflow](docs/program-2-model-workflow.md).
 

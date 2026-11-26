@@ -154,7 +154,9 @@ On the human references, `--run-human-references` produced Program 0 and Program
 on the supplied July 2025 input. Program 0 passed 3/3 and Program 1 passed 5/5, with the
 Program 1 handoff exact and 29/29 protected files verified before and after. Without a
 Program 2 output the status is `PARTIAL` (8 of 10), earliest divergence Program 2
-`STAR_2025JUL`, missing output.
+`STAR_2025JUL`, missing output. The command refuses `--run-human-references` alone (exit 2,
+a Program 2 source is required), so reproduce this result by passing an empty directory with
+`--program2-output` and a `--program2-source` flag, as in the [demo runbook](demo-runbook.md).
 
 With `--run-reference-program2` the full local chain reached `PASS`, 10 of 10: Program 0
 3/3, Program 1 5/5, Program 2 2/2 (source `helper_assisted_model_output`), both handoffs

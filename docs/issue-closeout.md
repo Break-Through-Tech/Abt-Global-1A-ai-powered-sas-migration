@@ -5,14 +5,33 @@ issue: its acceptance criteria in short, what PR #77 provides, what still needs 
 paid run, licensed SAS or Abt, and a recommended action.
 
 How to read the evidence column: file paths and commands were checked to exist on the branch
-by reading the source and docs. I could not run the test suite in the environment used to
-draft this (dependencies were not installed), so test counts and pass results are copied from
-the PR #77 description and the repository docs and are marked "unverified" where they are not
-re-run. The team should re-run `pytest` and the Docker suite before closing anything.
+by reading the source and docs. Test counts and pass results copied from the PR #77
+description and the repository docs are marked "unverified" unless a re-run is named. On
+2026-11-26 one person re-ran, on one Windows 11 machine at commit `e3ce14c` (see the
+[dry run in the demo runbook](demo-runbook.md#dry-run-on-2026-11-26-windows-11-commit-e3ce14c)):
+`docker compose run --rm sasguard pytest -q` (812 passed, 29 Docker-gated tests skipped),
+`sasguard verify-integrity` (29 files, host and Docker), the validation commands below, the
+wrong-candidate tests (3 passed) and the repair replay with Docker (1 passed). That is not an
+independent second-machine replay, so nothing below is closed on its strength alone. The team
+should still run the Docker-gated suite (`SASGUARD_RUN_DOCKER_TESTS=1`) and CI before closing
+anything.
 
-Two pieces of work are in progress on this branch and are not claimed here: a Program 2
-reference implementation, and a pipeline report-run extension. Both are pending; no results
-from them are described below.
+Two pieces of work are now on this branch and were verified in that run:
+
+* A Program 2 reference implementation, `reference_python/program2.py`. It was not written
+  by a team member and is pending teammate review, so `validate-pipeline` records its stage as
+  `helper_assisted_model_output` with the note "Program 2 reference implementation pending
+  teammate review". Command: `sasguard validate-pipeline --run-human-references
+  --run-reference-program2`. Result: PASS, 10 of 10 artifacts (Program 0 3/3, Program 1 5/5,
+  Program 2 2/2), both handoffs exact, 0 STAR mismatches, 29/29 protected files before and
+  after (7 s on the host). This is not a human Program 2 or approved CMS ratings, and it is
+  one July 2025 result against the supplied SAS artifacts.
+* Pipeline reports: `sasguard report-run <validate-pipeline run dir>` writes `handoff.md`
+  (CMS summary), `technical.md` (Abt record) and `report.json`. The PASS run rendered
+  `VERIFIED`; a deliberately wrong run (one Program 0 value changed) rendered `NOT VERIFIED`
+  with the earliest divergence. Abt has not confirmed the field list. The short CMS
+  `handoff.md` shows the Program 2 origin but not the "pending teammate review" note, which
+  only `technical.md` and `report.json` carry.
 
 Recommended actions use three labels: **close after PR 77 merges**, **keep open**,
 **close as superseded**. "Close" always means after a teammate has checked the evidence.
@@ -61,9 +80,9 @@ Recommended actions use three labels: **close after PR 77 merges**, **keep open*
   and CI pass; docs state parity scope and tolerance.
 - PR 77 provides: `src/sasguard/program0.py`; tests `tests/test_program0.py`,
   `tests/integration/test_program0_reference.py`; docs `docs/program-0-python.md`. The PR
-  description states Program 0 passed 3 of 3 artifacts with human references (unverified here).
-  Command: `sasguard validate-pipeline --run-human-references --program2-output DIR
-  --program2-source SOURCE`.
+  description states Program 0 passed 3 of 3 artifacts with human references; the 2026-11-26
+  dry run reproduced 3/3 in the pipeline command. Command: `sasguard validate-pipeline
+  --run-human-references --run-reference-program2`.
 - Still needs: a human re-run of the tests and CI on the merged branch.
 - Action: close after PR 77 merges (PR 53, the original #43 PR, is also still open and
   should be closed as superseded).
@@ -87,8 +106,9 @@ Recommended actions use three labels: **close after PR 77 merges**, **keep open*
   and mismatch kind; supplied files never modified; command and outcome documented.
 - PR 77 provides: `tests/integration/test_program0_wrong_candidates.py` (3 tests: direction
   reversal skipped, missing values to zero, leading-zero IDs lost) and
-  `docs/program0-wrong-candidates.md` with the Docker command and a documented "3 passed"
-  (unverified here, Docker-gated). Population versus sample standard deviation is covered by
+  `docs/program0-wrong-candidates.md` with the Docker command. The 2026-11-26 dry run got
+  "3 passed" on the host (they are not Docker-gated) and the same tests passed inside the
+  Docker `pytest -q` run. Population versus sample standard deviation is covered by
   the Mortality test from PR 40. Pipeline-level wrong-value cases are in
   `tests/verification/test_pipeline.py`.
 - Still needs: a Docker run of the three tests by someone other than the author.
@@ -136,9 +156,11 @@ Recommended actions use three labels: **close after PR 77 merges**, **keep open*
 
 - Acceptance: documented commands and expected outputs; another teammate runs it from a clean
   checkout; records what passed, failed and is unverified; no new API spending required.
-- PR 77 provides the ingredients: human reference run, wrong-candidate tests, `report-run`
-  (`docs/scoped-run-reports.md`), replay of recorded experiments. I found no dedicated demo
-  walkthrough document.
+- PR 77 provides the ingredients (human reference run, wrong-candidate tests, `report-run`,
+  replay of recorded experiments) and now `docs/demo-runbook.md`, which was dry-run
+  end to end on the author's Windows machine. The runbook covers the November pipeline; its
+  Program 0 pieces (human reference, wrong result, recorded repair, report) cover #49's
+  walkthrough.
 - Still needs: a written walkthrough, a clean-checkout run by a teammate, and the model
   segment (depends on #48 or a statement that it is blocked).
 - Action: keep open.
@@ -151,8 +173,10 @@ Recommended actions use three labels: **close after PR 77 merges**, **keep open*
   confirmed with Abt.
 - PR 77 provides: `src/sasguard/reporting/` (`report-run`, Program 0, Program 0 model, and
   July 2025 replay reports), `docs/scoped-run-reports.md`, tests `tests/test_reporting.py`,
-  `tests/test_program0_reporting.py`, `tests/test_july_2025_reporting.py`. A pipeline
-  report-run extension is in progress on this branch and is pending, not claimed.
+  `tests/test_program0_reporting.py`, `tests/test_july_2025_reporting.py`, and the pipeline
+  `report-run` extension (verified 2026-11-26: VERIFIED for a PASS run, NOT VERIFIED with the
+  earliest divergence for a wrong run, `handoff.md`, `technical.md` and `report.json`
+  written, no credentials found by a text search of the output).
 - Still needs: Abt confirmation of fields and delivery format; independent replay (#71);
   human review of a real report for leaked data.
 - Action: keep open.
@@ -206,8 +230,9 @@ Recommended actions use three labels: **close after PR 77 merges**, **keep open*
   (`docs/experiments/2026-11-10-program2-luna-baseline.md`: best candidate had two STAR
   mismatches, FAILED; `2026-11-16-program2-strict-replay.md`: a manual-correction replay
   reported as passing all ten comparisons, which depends on a candidate package held on
-  restricted Drive and is unverified here). A Program 2 reference implementation is in
-  progress on this branch and is pending, not claimed.
+  restricted Drive and is unverified here). The Program 2 reference implementation passes
+  2/2 Program 2 artifacts with 0 STAR mismatches in the chain (dry run 2026-11-26), but it
+  is not a model-translation result and does not close this issue.
 - Still needs: #46 approval and a paid or local prospective helper-assisted run; helper
   integration into the generation prompt; #69 resolved questions.
 - Action: keep open.
@@ -218,23 +243,35 @@ Recommended actions use three labels: **close after PR 77 merges**, **keep open*
   at the fixed 1e-12 tolerances; 29 protected files verified; wrong, missing and malformed
   cases rejected with earliest divergence; independent teammate replay.
 - PR 77 provides: `sasguard validate-pipeline`, `src/sasguard/verification/pipeline.py`,
-  `program1.py`, tests `tests/verification/test_pipeline.py` and `test_program1.py`, doc
-  `docs/full-pipeline-validation.md`. PR description result: PARTIAL, 8 of 10 with human
-  references, because no Program 2 candidate output is in the repository (unverified here).
-  The final-fix commit `664dc0f` names the earliest divergence correctly.
-- Still needs: Program 2 candidate output for 10 of 10; Tony's independent replay recorded in
-  the issue (OS, commit, image ID, pass counts, STAR mismatches, integrity result).
-- Action: keep open until the independent replay is recorded.
+  `program1.py`, tests `tests/verification/test_pipeline.py` (37 passed on the host in the
+  2026-11-26 dry run) and `test_program1.py`, doc `docs/full-pipeline-validation.md`.
+  Verified result (`--run-human-references --run-reference-program2`): PASS, 10 of 10, 0 STAR
+  mismatches, 29/29 integrity before and after, Program 2 labeled
+  `helper_assisted_model_output` (reference implementation pending teammate review). The
+  human references with no Program 2 output give PARTIAL 8 of 10 (earliest divergence
+  Program 2 `STAR_2025JUL`, missing output); that needs an empty `--program2-output`
+  directory because `--run-human-references` alone exits 2. A wrong Program 0 value is caught
+  at Program 0 with Programs 1 and 2 marked `upstream_failure`.
+- Still needs: teammate review of `reference_python/program2.py` (until then no
+  `human_reference` label); Tony's independent replay recorded in the issue (OS, commit,
+  image ID, pass counts, STAR mismatches, integrity result; use a host run so the commit and
+  OS are recorded, a Docker run records commit `unknown`); model-candidate chains for #68 and
+  #70.
+- Action: keep open until the independent replay is recorded and the Program 2 review is done.
 
 ### #72 Reproduce and rehearse the November pipeline demo (Loaardi, haileybella)
 
 - Acceptance: documented Docker workflow run on a second computer from a clean checkout;
   PowerShell and zsh instructions; full rehearsal including a wrong result and a bounded
   repair record; statuses explained separately; reports checked for secrets; team rehearsal.
-- PR 77 provides docs and commands (`docs/full-pipeline-validation.md`, model workflow docs,
-  `report-run`). The rehearsals themselves are human tasks.
-- Still needs: second-computer run, platform notes, rehearsal, depends on #67, #71, #52.
-- Action: keep open.
+- PR 77 provides `docs/demo-runbook.md` (PowerShell and zsh setup, ordered script, wrong
+  result, repair record replay, `report-run`, status vocabulary, limits, troubleshooting, a
+  record table) and a dry run of its commands on one Windows 11 machine on 2026-11-26. macOS
+  zsh and a clean clone were not run. The rehearsals themselves are human tasks.
+- Still needs: the second-computer clean-checkout run with the record table filled in,
+  the team rehearsal, a person reading the generated reports for sensitive content,
+  and the dependencies #67, #71, #52.
+- Action: keep open; the second-computer run is the next step.
 
 ## Open PRs superseded by PR 77 once it merges
 
@@ -270,4 +307,7 @@ claim comes from the PR description. I did not run that check for each PR.
 - A licensed SAS run of the FASTCLUS probes (#69).
 - Abt confirmation of report fields and delivery format (#52).
 - Teammate clean-checkout and second-computer replays (#13, #49, #71, #72).
-- The Program 2 candidate package (restricted Drive) for a 10 of 10 result (#71).
+- Teammate review of the Program 2 reference implementation, so its stage may be labeled
+  human (#71).
+- The Program 2 candidate package (restricted Drive) for the STRICT replay (#70); a 10 of 10
+  result on the branch already exists from the reference implementation.
