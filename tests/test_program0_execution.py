@@ -5,6 +5,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
 
+import pandas as pd
 import pytest
 from typer.testing import CliRunner
 
@@ -294,3 +295,63 @@ def test_postrun_integrity_failure_never_calls_optional_validator(
     assert report.validation_status == "not_run"
     assert calls == []
     assert program0.CandidateReport.model_validate_json(path.read_text()) == report
+
+
+def test_cli_validate_exits_unsuccessfully_and_preserves_file_reasons(
+    staged_repo: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def validator(*args):
+        return program0.CandidateValidationResult(
+            status="hash_mismatch", errors={"less100_measure.csv": "output changed"}
+        )
+
+    monkeypatch.setattr(cli, "validate_collected_program0", validator)
+    result = CliRunner().invoke(
+        cli.app,
+        [
+            "run-program0-candidate",
+            str(staged_repo.candidate),
+            "--project-root",
+            str(staged_repo.root),
+            "--validate",
+        ],
+    )
+    assert result.exit_code == 1
+    assert "SAS comparison: hash_mismatch" in result.stdout
+    assert "Full pipeline and CMS ratings are not verified" in result.stdout
+    path = next((staged_repo.root / "reports/runs").glob("*/report.json"))
+    saved = program0.CandidateReport.model_validate_json(path.read_text())
+    assert saved.validation_errors == {"less100_measure.csv": "output changed"}
+    assert saved.execution_result.passed
+
+
+def test_sas_source_is_staged_as_csv_with_separate_hashes(
+    staged_repo: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    binary = (staged_repo.root / program0.INPUT_PATH).with_suffix(".sas7bdat")
+    binary.write_bytes(b"test source input")
+    original_load = program0.load_artifact
+    frame = pd.DataFrame(
+        {"PROVIDER_ID": ["000001", "NA", "NULL"], "SCORE": [0.12345678901234566, 2.0, None]}
+    )
+
+    def load(path, **kwargs):
+        if path == binary:
+            assert kwargs == {"key": "PROVIDER_ID"}
+            return SimpleNamespace(frame=frame)
+        return original_load(path, **kwargs)
+
+    monkeypatch.setattr(program0, "load_artifact", load)
+    report, path = program0.run_program0_candidate(
+        staged_repo.root, staged_repo.candidate, input_format=program0.CandidateInputFormat.SAS7BDAT
+    )
+    staged = path.parent / "input/alldata_2025jul.csv"
+    loaded = pd.read_csv(staged, converters={"PROVIDER_ID": str}, float_precision="round_trip")
+    assert loaded["PROVIDER_ID"].tolist() == frame["PROVIDER_ID"].tolist()
+    assert loaded["SCORE"].iloc[:2].tolist() == frame["SCORE"].iloc[:2].tolist()
+    metadata = json.loads((path.parent / "staging.json").read_text())
+    assert metadata["input_format"] == "sas7bdat"
+    assert metadata["input_source_sha256"] == program0.sha256_file(binary)
+    assert metadata["staged_input_sha256"] == program0.sha256_file(staged)
+    assert report.input_format is program0.CandidateInputFormat.SAS7BDAT
+    assert report.validation_status == "not_run"

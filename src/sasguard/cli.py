@@ -9,17 +9,24 @@ import typer
 
 from sasguard import __version__
 from sasguard.config import load_project_configuration
-from sasguard.execution.program0 import run_program0_candidate
+from sasguard.execution.program0 import (
+    CandidateInputFormat,
+    run_program0_candidate,
+    validate_collected_program0,
+)
 from sasguard.execution.runner import RunnerLimits
 from sasguard.program0 import translate_program0
 from sasguard.prototypes.local_model import run_local_model_smoke, run_local_model_suite
 from sasguard.prototypes.local_model_reassessment import reassess_local_model_suite
 from sasguard.prototypes.mortality import run_mortality_prototype
+from sasguard.prototypes.program0_model import ModelSettings, run_program0_model
 from sasguard.prototypes.program0_prompt import (
     PromptInputFormat,
     check_program0_prompt,
     preview_program0_prompt,
 )
+from sasguard.prototypes.program01 import run_program01_chain
+from sasguard.reporting import write_run_report
 from sasguard.verification.integrity import load_and_verify_integrity
 
 app = typer.Typer(
@@ -177,6 +184,13 @@ def run_program0_candidate_command(
     timeout_seconds: Annotated[
         float, typer.Option(min=0.01, max=600, help="Generated-code execution timeout.")
     ] = 60,
+    validate: Annotated[
+        bool, typer.Option("--validate", help="Compare collected outputs with SAS on the host.")
+    ] = False,
+    input_format: Annotated[
+        CandidateInputFormat,
+        typer.Option(help="Supplied input source; sas7bdat stages a full-precision CSV."),
+    ] = CandidateInputFormat.CSV,
 ) -> None:
     """Execute a Program 0 candidate and collect CSVs for separate host validation."""
     try:
@@ -185,14 +199,111 @@ def run_program0_candidate_command(
             candidate,
             image=image,
             limits=RunnerLimits(timeout_seconds=timeout_seconds),
+            validator=validate_collected_program0 if validate else None,
+            input_format=input_format,
         )
     except (OSError, ValueError) as error:
         typer.echo(f"Program 0 candidate could not start: {error}", err=True)
         raise typer.Exit(code=2) from error
     typer.echo(f"Program 0 candidate: {result.status}. Report: {report}")
-    typer.echo("SAS comparison: not run.")
-    if not result.ready_for_validation:
+    if result.validation_status == "not_run":
+        typer.echo("SAS comparison: not run.")
+    else:
+        typer.echo(f"SAS comparison: {result.validation_status}.")
+    if validate:
+        typer.echo("Scope: Program 0 only. Full pipeline and CMS ratings are not verified.")
+    if not result.ready_for_validation or (validate and result.validation_status != "passed"):
         raise typer.Exit(code=1)
+
+
+@app.command("model-program0")
+def model_program0_command(
+    preview_directory: Annotated[Path, typer.Argument(help="Reviewed Program 0 prompt preview.")],
+    image: Annotated[str, typer.Option(help="Existing isolated Docker runner image or image ID.")],
+    project_root: Annotated[Path, typer.Option(help="Repository root.")] = Path("."),
+    model: Annotated[
+        str, typer.Option(help="Exact model ID for the Responses API.")
+    ] = "gpt-6-luna",
+    repair_attempts: Annotated[
+        int, typer.Option(min=0, max=2, help="Maximum additional aggregate-guided repair calls.")
+    ] = 0,
+    max_output_tokens: Annotated[int, typer.Option(min=128, max=32768)] = 8192,
+    timeout_seconds: Annotated[
+        float, typer.Option(min=0.01, max=600, help="Timeout for each Docker execution.")
+    ] = 60,
+) -> None:
+    """Send the source/header payload, then generate, run, and validate Program 0.
+
+    Authorizes at most 1 + repair-attempts requests. The host reads SASGUARD_API_KEY.
+    """
+    try:
+        result, report = run_program0_model(
+            project_root,
+            preview_directory,
+            image=image,
+            settings=ModelSettings(
+                model=model, repair_attempts=repair_attempts, max_output_tokens=max_output_tokens
+            ),
+            limits=RunnerLimits(timeout_seconds=timeout_seconds),
+        )
+    except (OSError, ValueError) as error:
+        typer.echo(f"Program 0 model workflow could not start: {error}", err=True)
+        raise typer.Exit(code=2) from error
+    typer.echo(f"Program 0 model workflow: {result.status}. Evidence: {report}")
+    for attempt in result.attempts:
+        typer.echo(
+            f"Attempt {attempt.index}: generation {attempt.generation_status}, "
+            f"execution {attempt.execution_status}, SAS comparison {attempt.validation_status}."
+        )
+    typer.echo("Scope: Program 0 only. Full pipeline and CMS ratings are not verified.")
+    if result.status != "passed":
+        raise typer.Exit(code=1)
+
+
+@app.command("run-program01-chain")
+def program01_chain_command(
+    program0_directory: Annotated[
+        Path, typer.Argument(help="Verified Program 0 candidate or model-workflow directory.")
+    ],
+    image: Annotated[str, typer.Option(help="Existing isolated Docker runner image or image ID.")],
+    project_root: Annotated[Path, typer.Option(help="Repository root.")] = Path("."),
+) -> None:
+    """Run human-reference Program 1 on verified Python Program 0 output."""
+    try:
+        result, report = run_program01_chain(project_root, program0_directory, image=image)
+    except (OSError, ValueError) as error:
+        typer.echo(f"Program 0 to Program 1 chain could not start: {error}", err=True)
+        raise typer.Exit(code=2) from error
+    typer.echo(f"Program 0 to Program 1 chain: {result.status}. Evidence: {report}")
+    for name, comparison in result.comparisons.items():
+        copied = result.input_passthrough.get(name)
+        typer.echo(
+            f"{name}: SAS comparison {'passed' if comparison.passed else 'failed'}, "
+            f"input passthrough {'passed' if copied and copied.passed else 'failed'}."
+        )
+    typer.echo("Program 1 is human-reference Python. Full pipeline and ratings are not verified.")
+    if result.status != "passed":
+        raise typer.Exit(code=1)
+
+
+@app.command("report-run")
+def report_run(
+    run_directory: Annotated[Path, typer.Argument(help="Saved run directory inside reports/runs.")],
+    project_root: Annotated[Path, typer.Option(help="Repository root.")] = Path("."),
+    output_directory: Annotated[
+        Path | None,
+        typer.Option(help="New report directory inside reports/runs; never overwritten."),
+    ] = None,
+) -> None:
+    """Write an internal handoff draft and technical summary from recorded evidence."""
+    try:
+        destination = write_run_report(
+            project_root, run_directory, output_directory=output_directory
+        )
+    except (OSError, ValueError) as error:
+        typer.echo(f"Report could not be generated: {error}", err=True)
+        raise typer.Exit(code=2) from error
+    typer.echo(f"Internal draft generated: {destination}. Review scope and status before sharing.")
 
 
 @app.command("preview-program0-prompt")
