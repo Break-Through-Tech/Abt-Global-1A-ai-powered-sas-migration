@@ -7,6 +7,7 @@ against its own record is labelled FAILED, never VERIFIED.
 
 from __future__ import annotations
 
+import html
 import json
 import re
 from datetime import UTC, datetime
@@ -495,7 +496,8 @@ def render_pipeline_handoff(report: PipelineRunReport) -> str:
                 "",
                 "Stages not marked as human reference were not written by a team member; "
                 + ", ".join(_md(s.program) for s in unreviewed)
-                + " have no recorded human review. A matching result does not replace that "
+                + (" has" if len(unreviewed) == 1 else " have")
+                + " no recorded human review. A matching result does not replace that "
                 "review.",
             ]
         )
@@ -632,6 +634,213 @@ def render_pipeline_technical(report: PipelineRunReport) -> str:
     return "\n".join(lines) + "\n"
 
 
+HTML_STYLE = """
+:root{--bg:#f6f7f9;--card:#fff;--text:#1d2330;--muted:#5b6475;--line:#d9dde5;--bar:#44546a;
+--ok:#1b7a43;--ok-bg:#e3f4ea;--warn:#8a5a00;--warn-bg:#fff1d0;--bad:#b3261e;--bad-bg:#fbe4e2}
+@media (prefers-color-scheme:dark){:root{--bg:#14171d;--card:#1d222b;--text:#e8ebf0;
+--muted:#a3acbb;--line:#363d4a;--bar:#8fa3bf;--ok:#6fd49a;--ok-bg:#16301f;--warn:#f2c35b;
+--warn-bg:#35290d;--bad:#ff8f87;--bad-bg:#3a1917}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);line-height:1.5;
+font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+main{max-width:980px;margin:0 auto;padding:24px 16px 40px}
+h1{font-size:1.5rem;margin:0 0 4px}h2{font-size:1.1rem;margin:28px 0 10px}
+.sub{color:var(--muted);margin:0 0 20px}
+.badge{border-radius:10px;padding:18px 20px;border:2px solid var(--accent);
+background:var(--accent-bg);color:var(--accent)}
+.badge strong{display:block;font-size:2rem;letter-spacing:.03em;line-height:1.2}
+.badge span{color:var(--text)}
+.s-verified{--accent:var(--ok);--accent-bg:var(--ok-bg)}
+.s-notverified{--accent:var(--warn);--accent-bg:var(--warn-bg)}
+.s-failed{--accent:var(--bad);--accent-bg:var(--bad-bg)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;
+margin-top:16px}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px 14px}
+.tile b{display:block;font-size:1.6rem}.tile span{color:var(--muted);font-size:.9rem}
+.tablewrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;background:var(--card);border:1px solid var(--line)}
+th,td{text-align:left;vertical-align:top;padding:8px 10px;border-bottom:1px solid var(--line)}
+th{font-size:.85rem;color:var(--muted)}
+.bars{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px 14px}
+.row{display:grid;grid-template-columns:90px 1fr 80px;gap:10px;align-items:center;margin:6px 0}
+.track{background:var(--bg);border:1px solid var(--line);height:18px;border-radius:4px}
+.fill{background:var(--bar);height:100%;border-radius:3px}
+.row output{text-align:right;font-variant-numeric:tabular-nums}
+.note{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--accent);
+border-radius:6px;padding:10px 14px;margin:10px 0}
+ul{padding-left:20px}
+footer{margin-top:32px;color:var(--muted);font-size:.85rem}
+@media print{body{background:#fff;color:#000}main{max-width:none;padding:0}
+.badge,.tile,.note,table,.bars{break-inside:avoid}
+.fill{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+"""
+
+
+def _h(value: object) -> str:
+    """Escape a value for HTML after the same secret redaction the handoff applies."""
+    return html.escape(_clean(value), quote=True)
+
+
+def _html_status_sentence(report: PipelineRunReport) -> str:
+    if report.scope_status == "VERIFIED":
+        return (
+            "Programs 0, 1 and 2 were run as Python and every output, every handoff between "
+            "programs, and every individual star assignment matched the supplied SAS artifacts."
+        )
+    if report.scope_status == "NOT VERIFIED":
+        return (
+            "Only part of the pipeline matched SAS. These are not CMS star ratings and must "
+            "not be used as such."
+        )
+    return (
+        "The run FAILED validation or its record could not be confirmed. These are not CMS "
+        "star ratings and must not be used as such."
+    )
+
+
+def _html_stage_note(stage: StageRow) -> str:
+    parts = [_h(stage.note)] if stage.note else []
+    if stage.reviewed_by:
+        parts.append(f"reviewed by {_h(stage.reviewed_by)} (as recorded at run time)")
+    return "; ".join(parts) or "none"
+
+
+def _html_distribution(report: PipelineRunReport) -> str:
+    if report.hospitals_processed is None:
+        return "<p>Hospital counts are unavailable. " + _h(report.counts_note) + "</p>"
+    intro = (
+        f"<p>Processed {report.hospitals_processed:,} hospitals; "
+        f"{report.hospitals_eligible or 0:,} met the rating criteria.</p>"
+    )
+    if report.star_distribution is None:
+        return intro + "<p>Star distribution is not shown for a run that is not VERIFIED.</p>"
+    counts = {
+        (f"{k} star" if k == "1" else f"{k} stars"): v for k, v in report.star_distribution.items()
+    }
+    counts["Unrated"] = report.hospitals_processed - sum(report.star_distribution.values())
+    peak = max(counts.values(), default=0) or 1
+    rows = "".join(
+        f'<div class="row"><span>{_h(name)}</span>'
+        f'<div class="track"><div class="fill" style="width:{value / peak * 100:.1f}%"></div></div>'
+        f"<output>{value:,}</output></div>"
+        for name, value in counts.items()
+    )
+    return (
+        intro + f'<div class="bars" role="group" aria-label="Star rating distribution">{rows}</div>'
+    )
+
+
+def render_pipeline_html(report: PipelineRunReport) -> str:
+    """Standalone CMS-safe view. Built only from the fields and wording the handoff uses."""
+    label = report.scope_status
+    css_class = {"VERIFIED": "s-verified", "NOT VERIFIED": "s-notverified"}.get(label, "s-failed")
+    confirmed = not report.evidence_issues
+    comparisons = (
+        f"{report.artifacts_passed} of {report.artifacts_total} SAS artifact comparisons passed."
+        if confirmed
+        else f"The record claims {report.artifacts_passed} of {report.artifacts_total} SAS "
+        "artifact comparisons passed, but the record could not be confirmed, so that count "
+        "is not relied on."
+    )
+    tiles = [
+        (
+            f"{report.artifacts_passed} / {report.artifacts_total}",
+            "artifact comparisons passed" if confirmed else "comparisons claimed (not relied on)",
+        )
+    ]
+    if report.star_mismatches is not None and confirmed:
+        tiles.append((f"{report.star_mismatches:,}", "STAR mismatches against SAS"))
+    tiles.append(
+        (
+            "Passed"
+            if report.integrity_before == report.integrity_after
+            and report.integrity_before.endswith("(passed)")
+            else _h(report.integrity_before) + " / " + _h(report.integrity_after),
+            "protected-file integrity, before and after the run",
+        )
+    )
+    tile_html = "".join(
+        f'<div class="tile"><b>{value}</b><span>{html.escape(text)}</span></div>'
+        for value, text in tiles
+    )
+    stage_rows = "".join(
+        f"<tr><td>{_h(s.program)}</td><td>{_h(s.code_origin)}</td>"
+        f"<td>{'reviewed by ' + _h(s.reviewed_by) if s.reviewed_by else 'no recorded human review'}"
+        f"</td><td>{_h(s.status)} ({s.artifacts_passed}/{s.artifacts_total} artifacts)</td>"
+        f"<td>{'not applicable' if s.handoff == 'not_applicable' else s.handoff}</td>"
+        f"<td>{_html_stage_note(s)}</td></tr>"
+        for s in report.stages
+    )
+    notes: list[str] = []
+    unreviewed = [
+        s
+        for s in report.stages
+        if s.code_origin != ORIGINS["human_reference"] and not s.reviewed_by
+    ]
+    if unreviewed:
+        notes.append(
+            "Stages not marked as human reference were not written by a team member; "
+            + ", ".join(_h(s.program) for s in unreviewed)
+            + (" has" if len(unreviewed) == 1 else " have")
+            + " no recorded human review. A matching result does not replace that review."
+        )
+    if report.unverified_evidence:
+        notes.append(
+            "Not every stage's outputs could be re-checked against the record, so this run "
+            "cannot be VERIFIED: " + ", ".join(_h(i) for i in report.unverified_evidence)
+        )
+    if report.evidence_issues:
+        notes.append("Record problems: " + ", ".join(_h(i) for i in report.evidence_issues))
+    if report.earliest_divergence_cms:
+        notes.append(f"Earliest divergence: {_h(report.earliest_divergence_cms)}")
+    notes.append(
+        "Human review: "
+        + _h(_review_summary(report))
+        + ". Abt approval: not recorded. This is not Abt or CMS approval."
+    )
+    scope_note = (
+        "Verified against the supplied SAS artifacts: the ten comparison artifacts and the "
+        "copied handoffs between programs, within the fixed 1e-12 tolerance."
+        if label == "VERIFIED"
+        else "Compared against the supplied SAS artifacts: the ten comparison artifacts and "
+        "the copied handoffs between programs, within the fixed 1e-12 tolerance. This run did "
+        "not verify them; see the status above."
+    )
+    checked = [
+        scope_note,
+        "Trusted, not independently verified: the supplied SAS outputs and the CMS input "
+        "data themselves.",
+        "Not checked: any release other than July 2025, SAS runtime behaviour, statistical "
+        "correctness of the CMS method, and generated-code quality.",
+    ]
+    note_html = "".join(f'<div class="note">{n}</div>' for n in notes)
+    checked_html = "".join(f"<li>{html.escape(c)}</li>" for c in checked)
+    return (
+        '<!doctype html>\n<html lang="en"><head><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width,initial-scale=1">'
+        '<meta name="color-scheme" content="light dark">'
+        "<title>SASGuard pipeline validation</title>"
+        f"<style>{HTML_STYLE}</style></head>\n"
+        f'<body><main class="{css_class}">'
+        "<h1>SASGuard pipeline validation</h1>"
+        '<p class="sub">CMS July 2025 hospital star ratings. Internal draft. Abt review and '
+        "approval are required before sharing with CMS.</p>"
+        f'<section class="badge" aria-label="Validation status"><strong>{html.escape(label)}'
+        f"</strong><span>{html.escape(_html_status_sentence(report))}</span></section>"
+        f'<p>{html.escape(comparisons)}</p><div class="tiles">{tile_html}</div>'
+        "<h2>Stages and code origin</h2>"
+        '<div class="tablewrap"><table><thead><tr><th>Program</th><th>Code origin</th>'
+        "<th>Review</th><th>Outputs passed</th><th>Handoff check</th><th>Note</th></tr></thead>"
+        f"<tbody>{stage_rows}</tbody></table></div>"
+        f"<h2>Hospitals</h2>{_html_distribution(report)}"
+        f"<h2>What was and was not checked</h2><ul>{checked_html}</ul>"
+        f"<h2>Caveats</h2>{note_html}"
+        f"<footer>Input release: {_h(report.input_release)}. Run date: {_h(report.run_date)} "
+        f"({_h(report.run_date_source)}).</footer>"
+        "</main></body></html>\n"
+    )
+
+
 def write_pipeline_report(project_root: Path, run_directory: Path, target: Path) -> None:
     """Write into the already validated, newly created ``target`` directory."""
     report = read_pipeline_report(project_root, run_directory)
@@ -642,3 +851,4 @@ def write_pipeline_report(project_root: Path, run_directory: Path, target: Path)
     )
     (target / "handoff.md").write_text(render_pipeline_handoff(report), encoding="utf-8")
     (target / "technical.md").write_text(render_pipeline_technical(report), encoding="utf-8")
+    (target / "report.html").write_text(render_pipeline_html(report), encoding="utf-8")

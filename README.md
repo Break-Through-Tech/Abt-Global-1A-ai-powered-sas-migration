@@ -109,6 +109,11 @@ Expected: `Integrity check passed: 29 protected files verified.`, then
 command writes `handoff.md` (CMS summary), `technical.md` (Abt) and `report.json` from the
 evidence directory printed by `validate-pipeline`.
 
+`sasguard demo` runs the integrity check, the pipeline and the reports in one step and also
+writes a self-contained `report.html`.
+
+Adopting SASGuard at Abt: see [docs/adopting-sasguard.md](docs/adopting-sasguard.md).
+
 The full demo, including a deliberately wrong result that fails, a partial run, a recorded
 repair and both reports, is in the [November demo runbook](docs/demo-runbook.md). Docker-only
 setup, Dev Containers and JupyterLab are in [Development setup](docs/development-setup.md).
@@ -127,7 +132,7 @@ setup, Dev Containers and JupyterLab are in [Development setup](docs/development
 
 | Topic | Docs |
 |---|---|
-| Pipeline and results | [Full-pipeline validation](docs/full-pipeline-validation.md), [Demo runbook](docs/demo-runbook.md), [Issue close-out](docs/issue-closeout.md) |
+| Pipeline and results | [Adopting SASGuard at Abt](docs/adopting-sasguard.md), [Full-pipeline validation](docs/full-pipeline-validation.md), [Demo runbook](docs/demo-runbook.md), [Issue close-out](docs/issue-closeout.md) |
 | SAS analysis | [Program 0](docs/program-0-analysis.md), [Program 1](docs/program-1-analysis.md), [Program 2 semantics](docs/program-2-sas-semantics.md), [Artifact inventory](docs/artifact-inventory.md) |
 | Model workflows | [Program 0](docs/program-0-model-workflow.md), [Program 2](docs/program-2-model-workflow.md), [Prompt preview](docs/program-0-prompt-preview.md), [Model budget (draft)](docs/model-budget-decision.md), [Experiments](docs/experiments/) |
 | Verification | [Comparison policy](docs/comparison-policy.md), [Artifact comparison](docs/artifact-comparison.md), [Data integrity](docs/data-integrity.md), [Golden trace](docs/golden-trace.md), [Wrong candidates](docs/program0-wrong-candidates.md) |

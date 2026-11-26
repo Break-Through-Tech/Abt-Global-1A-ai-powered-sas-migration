@@ -1,6 +1,7 @@
 """Command-line entry point for SASGuard."""
 
 import csv
+import json
 from pathlib import Path
 from typing import Annotated
 from uuid import uuid4
@@ -35,6 +36,7 @@ from sasguard.prototypes.program2_model import run_program2_model
 from sasguard.reporting import write_run_report
 from sasguard.verification.integrity import load_and_verify_integrity
 from sasguard.verification.pipeline import (
+    PipelineValidation,
     StageInput,
     StageSource,
     render_summary,
@@ -302,80 +304,29 @@ REFERENCE_PROGRAM2_NOTE = "Program 2 reference implementation pending teammate r
 REFERENCE_PROGRAM2_REVIEWED_NOTE = "Program 2 reference implementation, teammate review recorded"
 
 
-@app.command("validate-pipeline")
-def validate_pipeline_command(
-    program2_output: Annotated[
-        Path | None, typer.Option(help="Directory with the actual Program 2 output CSVs.")
-    ] = None,
-    program2_source: Annotated[
-        StageSource | None,
-        typer.Option(
-            help="Where the Program 2 output came from. Not allowed with "
-            "--run-reference-program2, whose origin is fixed as helper_assisted_model_output."
-        ),
-    ] = None,
-    program2_reviewed_by: Annotated[
-        str,
-        typer.Option(
-            help="Teammate who reviewed the Program 2 code. Recorded separately; it does not "
-            "change the code origin."
-        ),
-    ] = "",
-    run_reference_program2: Annotated[
-        bool,
-        typer.Option(
-            "--run-reference-program2",
-            help="Produce Program 2 output from reference_python/program2.py (pending "
-            "teammate review) on the Program 0 and Program 1 outputs.",
-        ),
-    ] = False,
-    run_human_references: Annotated[
-        bool,
-        typer.Option(
-            "--run-human-references",
-            help="Produce Program 0 and Program 1 outputs from the human references.",
-        ),
-    ] = False,
-    run_human_program1: Annotated[
-        bool,
-        typer.Option(
-            "--run-human-program1",
-            help="Produce Program 1 outputs from the human reference on --program0-output.",
-        ),
-    ] = False,
-    program0_output: Annotated[
-        Path | None, typer.Option(help="Directory with the actual Program 0 output CSVs.")
-    ] = None,
-    program0_source: Annotated[
-        StageSource | None, typer.Option(help="Where the Program 0 output came from.")
-    ] = None,
-    program1_output: Annotated[
-        Path | None, typer.Option(help="Directory with the actual Program 1 output CSVs.")
-    ] = None,
-    program1_source: Annotated[
-        StageSource | None, typer.Option(help="Where the Program 1 output came from.")
-    ] = None,
-    program0_code: Annotated[
-        Path | None, typer.Option(help="Candidate source file to hash for Program 0.")
-    ] = None,
-    program1_code: Annotated[
-        Path | None, typer.Option(help="Candidate source file to hash for Program 1.")
-    ] = None,
-    program2_code: Annotated[
-        Path | None, typer.Option(help="Candidate source file to hash for Program 2.")
-    ] = None,
-    program2_note: Annotated[str, typer.Option(help="Free-text provenance note.")] = "",
-    output_directory: Annotated[
-        Path | None, typer.Option(help="New directory under reports/runs for the record.")
-    ] = None,
-    project_root: Annotated[Path, typer.Option(help="Repository root.")] = Path("."),
-) -> None:
-    """Validate all ten Program 0, 1 and 2 artifacts on actual chained Python outputs.
+def _record_pipeline_validation(
+    root: Path,
+    *,
+    program2_output: Path | None,
+    program2_source: StageSource | None,
+    program2_reviewed_by: str,
+    run_reference_program2: bool,
+    run_human_references: bool,
+    run_human_program1: bool,
+    program0_output: Path | None,
+    program0_source: StageSource | None,
+    program1_output: Path | None,
+    program1_source: StageSource | None,
+    program0_code: Path | None,
+    program1_code: Path | None,
+    program2_code: Path | None,
+    program2_note: str,
+    output_directory: Path | None,
+) -> tuple[PipelineValidation, Path, str]:
+    """Run the pipeline validation, write its record, and return result, run directory, summary.
 
-    Exits 0 only for PASS (all ten comparisons, both handoffs, integrity). PARTIAL and
-    FAIL exit 1 and report the earliest divergence.
+    Setup errors are reported on stderr and raise typer.Exit(2).
     """
-    root = project_root.resolve()
     runs = (root / "reports" / "runs").resolve()
     run = (output_directory or runs / f"pipeline-{uuid4()}").resolve()
     if run == runs or not run.is_relative_to(runs) or run.exists():
@@ -458,8 +409,199 @@ def validate_pipeline_command(
     )
     summary = render_summary(result)
     (run / "summary.md").write_text(summary, encoding="utf-8")
+    return result, run, summary
+
+
+@app.command("validate-pipeline")
+def validate_pipeline_command(
+    program2_output: Annotated[
+        Path | None, typer.Option(help="Directory with the actual Program 2 output CSVs.")
+    ] = None,
+    program2_source: Annotated[
+        StageSource | None,
+        typer.Option(
+            help="Where the Program 2 output came from. Not allowed with "
+            "--run-reference-program2, whose origin is fixed as helper_assisted_model_output."
+        ),
+    ] = None,
+    program2_reviewed_by: Annotated[
+        str,
+        typer.Option(
+            help="Teammate who reviewed the Program 2 code. Recorded separately; it does not "
+            "change the code origin."
+        ),
+    ] = "",
+    run_reference_program2: Annotated[
+        bool,
+        typer.Option(
+            "--run-reference-program2",
+            help="Produce Program 2 output from reference_python/program2.py (pending "
+            "teammate review) on the Program 0 and Program 1 outputs.",
+        ),
+    ] = False,
+    run_human_references: Annotated[
+        bool,
+        typer.Option(
+            "--run-human-references",
+            help="Produce Program 0 and Program 1 outputs from the human references.",
+        ),
+    ] = False,
+    run_human_program1: Annotated[
+        bool,
+        typer.Option(
+            "--run-human-program1",
+            help="Produce Program 1 outputs from the human reference on --program0-output.",
+        ),
+    ] = False,
+    program0_output: Annotated[
+        Path | None, typer.Option(help="Directory with the actual Program 0 output CSVs.")
+    ] = None,
+    program0_source: Annotated[
+        StageSource | None, typer.Option(help="Where the Program 0 output came from.")
+    ] = None,
+    program1_output: Annotated[
+        Path | None, typer.Option(help="Directory with the actual Program 1 output CSVs.")
+    ] = None,
+    program1_source: Annotated[
+        StageSource | None, typer.Option(help="Where the Program 1 output came from.")
+    ] = None,
+    program0_code: Annotated[
+        Path | None, typer.Option(help="Candidate source file to hash for Program 0.")
+    ] = None,
+    program1_code: Annotated[
+        Path | None, typer.Option(help="Candidate source file to hash for Program 1.")
+    ] = None,
+    program2_code: Annotated[
+        Path | None, typer.Option(help="Candidate source file to hash for Program 2.")
+    ] = None,
+    program2_note: Annotated[str, typer.Option(help="Free-text provenance note.")] = "",
+    output_directory: Annotated[
+        Path | None, typer.Option(help="New directory under reports/runs for the record.")
+    ] = None,
+    project_root: Annotated[Path, typer.Option(help="Repository root.")] = Path("."),
+) -> None:
+    """Validate all ten Program 0, 1 and 2 artifacts on actual chained Python outputs.
+
+    Exits 0 only for PASS (all ten comparisons, both handoffs, integrity). PARTIAL and
+    FAIL exit 1 and report the earliest divergence.
+    """
+    root = project_root.resolve()
+    result, run, summary = _record_pipeline_validation(
+        root,
+        program2_output=program2_output,
+        program2_source=program2_source,
+        program2_reviewed_by=program2_reviewed_by,
+        run_reference_program2=run_reference_program2,
+        run_human_references=run_human_references,
+        run_human_program1=run_human_program1,
+        program0_output=program0_output,
+        program0_source=program0_source,
+        program1_output=program1_output,
+        program1_source=program1_source,
+        program0_code=program0_code,
+        program1_code=program1_code,
+        program2_code=program2_code,
+        program2_note=program2_note,
+        output_directory=output_directory,
+    )
     typer.echo(summary)
     typer.echo(f"Evidence: {run}")
+    if result.status != "PASS":
+        raise typer.Exit(code=1)
+
+
+@app.command("demo")
+def demo_command(
+    program2_reviewed_by: Annotated[
+        str,
+        typer.Option(
+            help="Teammate who reviewed the Program 2 code. Recorded separately; it does not "
+            "change the code origin."
+        ),
+    ] = "",
+    project_root: Annotated[Path, typer.Option(help="Repository root.")] = Path("."),
+) -> None:
+    """Run the whole verified pipeline from the bundled references and write reports.
+
+    Checks protected-file integrity, runs Programs 0, 1 and 2 in-process, compares all ten
+    artifacts with the supplied SAS outputs, and writes reports. Needs no model, API key or
+    Docker. Exits 0 only for PASS; PARTIAL and FAIL exit 1 after the reports are written.
+    """
+    root = project_root.resolve()
+    manifest_path = root / "configs" / "protected-artifacts.json"
+    try:
+        integrity = load_and_verify_integrity(root, manifest_path)
+    except (OSError, ValueError) as error:
+        typer.echo(f"Demo could not start: integrity check could not run: {error}", err=True)
+        raise typer.Exit(code=2) from error
+    if not integrity.passed:
+        typer.echo(
+            "Demo stopped: protected-file integrity check failed. Restore the supplied files "
+            "(run `sasguard verify-integrity` for details).",
+            err=True,
+        )
+        for label, paths in (
+            ("Missing", integrity.missing_files),
+            ("Modified", integrity.modified_files),
+            ("Unexpected", integrity.unexpected_files),
+        ):
+            for path in paths:
+                typer.echo(f"{label}: {path}", err=True)
+        raise typer.Exit(code=1)
+    typer.echo(f"Integrity check passed: {integrity.checked_files} protected files verified.")
+    typer.echo("Running Programs 0, 1 and 2 from the bundled references. This takes a moment.")
+    result, run, _ = _record_pipeline_validation(
+        root,
+        program2_output=None,
+        program2_source=None,
+        program2_reviewed_by=program2_reviewed_by,
+        run_reference_program2=True,
+        run_human_references=True,
+        run_human_program1=False,
+        program0_output=None,
+        program0_source=None,
+        program1_output=None,
+        program1_source=None,
+        program0_code=None,
+        program1_code=None,
+        program2_code=None,
+        program2_note="",
+        output_directory=None,
+    )
+    try:
+        report = write_run_report(root, run)
+    except (OSError, ValueError) as error:
+        typer.echo(f"Report could not be generated: {error}", err=True)
+        raise typer.Exit(code=2) from error
+    after = result.integrity_after
+    mismatches = "unknown" if result.star_mismatches is None else str(result.star_mismatches)
+    typer.echo("")
+    typer.echo(
+        f"Status: {result.status}. {result.artifacts_passed} of {result.artifacts_total} "
+        "artifact comparisons passed."
+    )
+    typer.echo(f"STAR mismatches: {mismatches}.")
+    typer.echo(
+        f"Protected-file integrity after the run: {'passed' if after.get('passed') else 'failed'}."
+    )
+    typer.echo(f"Evidence: {run}")
+    report_status = json.loads((report / "report.json").read_text(encoding="utf-8")).get(
+        "scope_status", "unknown"
+    )
+    typer.echo(f"Report status: {report_status}.")
+    typer.echo(f"Reports: {report}")
+    for entry in sorted(report.iterdir()):
+        if entry.is_file():
+            typer.echo(f"  {entry.name}")
+    review = (
+        f"teammate review recorded by {program2_reviewed_by.strip()}"
+        if program2_reviewed_by.strip()
+        else "pending teammate review"
+    )
+    typer.echo(
+        f"Caveat: Program 2 reference is {review}; PASS means outputs match the "
+        "supplied SAS artifacts, not Abt/CMS approval."
+    )
     if result.status != "PASS":
         raise typer.Exit(code=1)
 

@@ -1,5 +1,7 @@
 # November pipeline demo runbook
 
+Shortcut: `sasguard demo` runs the integrity check, the full pipeline and the reports in one command and writes `report.html` next to `handoff.md`. The steps below show each part separately. For adopting SASGuard beyond the demo, see [Adopting SASGuard at Abt](adopting-sasguard.md).
+
 Runbook for the Nov 27 rehearsal (issue #72, which builds on the October walkthrough in #49).
 It runs the full Program 0, 1 and 2 pipeline on the supplied CMS July 2025 data, shows an
 executable but wrong result failing validation, shows how a bounded repair attempt is
