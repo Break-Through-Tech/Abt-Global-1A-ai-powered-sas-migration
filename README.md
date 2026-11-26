@@ -97,6 +97,7 @@ docker compose build
 docker compose run --rm sasguard sasguard verify-integrity
 docker compose run --rm sasguard pytest
 docker compose run --rm sasguard sasguard version
+docker compose run --rm sasguard sasguard validate-pipeline --help
 ```
 
 ### macOS zsh
@@ -108,6 +109,7 @@ docker compose build
 docker compose run --rm sasguard sasguard verify-integrity
 docker compose run --rm sasguard pytest
 docker compose run --rm sasguard sasguard version
+docker compose run --rm sasguard sasguard validate-pipeline --help
 ```
 
 The expected CLI version is currently `0.1.0`.
@@ -137,6 +139,10 @@ see [Program 0 model workflow](docs/program-0-model-workflow.md).
 
 To feed verified Python Program 0 output into the human Program 1 reference and check
 all five domains, see [Program 0 to Program 1 chain](docs/program-0-to-1-chain.md).
+
+To validate all ten Program 0, 1 and 2 artifacts as one chain of actual Python outputs with
+`sasguard validate-pipeline` (PASS, PARTIAL or FAIL, with the earliest divergence), see
+[Full-pipeline validation](docs/full-pipeline-validation.md).
 
 For bounded Program 2 model translation and comparison of stars and national averages,
 see [Program 2 model workflow](docs/program-2-model-workflow.md).
