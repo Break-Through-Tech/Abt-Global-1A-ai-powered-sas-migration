@@ -32,8 +32,8 @@ averages. It reads only the Program 1 CSVs and Program 0's `std_data_2025jul_ana
 and writes `star_2025jul.csv` and `national_average_2025jul.csv`.
 
 Review status: not written by a team member; pending teammate review. The pipeline command
-therefore labels it `helper_assisted_model_output` unless `--program2-source human_reference`
-is passed explicitly. On the real July 2025 chain it matched both SAS artifacts, with no
+always labels it `helper_assisted_model_output`. A teammate review is recorded separately
+with `--program2-reviewed-by "<name>"` and does not change that origin. On the real July 2025 chain it matched both SAS artifacts, with no
 unresolved FASTCLUS behavior hit. See
 [`docs/full-pipeline-validation.md`](../docs/full-pipeline-validation.md).
 

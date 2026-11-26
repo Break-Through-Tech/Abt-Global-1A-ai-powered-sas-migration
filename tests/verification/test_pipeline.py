@@ -520,12 +520,24 @@ def test_reference_program2_defaults_to_helper_assisted_label() -> None:
         shutil.rmtree(run_directory, ignore_errors=True)
 
 
-def test_reference_program2_is_human_reference_only_when_requested() -> None:
+def test_reference_program2_origin_cannot_be_relabelled_human() -> None:
     outcome, run_directory = invoke_reference_program2("--program2-source", "human_reference")
+    try:
+        assert outcome.exit_code == 2
+        assert not (run_directory / "pipeline-validation.json").exists()
+    finally:
+        shutil.rmtree(run_directory, ignore_errors=True)
+
+
+def test_reference_program2_review_is_recorded_separately_from_origin() -> None:
+    outcome, run_directory = invoke_reference_program2("--program2-reviewed-by", "A. Teammate")
     try:
         assert outcome.exit_code == 0, outcome.output
         record = json.loads((run_directory / "pipeline-validation.json").read_text("utf-8"))
-        assert record["stages"][2]["source"] == "human_reference"
+        program2 = record["stages"][2]
+        assert program2["source"] == "helper_assisted_model_output"
+        assert program2["reviewed_by"] == "A. Teammate"
+        assert "pending teammate review" not in program2["note"]
     finally:
         shutil.rmtree(run_directory, ignore_errors=True)
 

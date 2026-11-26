@@ -2,6 +2,7 @@
 
 import json
 import shutil
+from collections.abc import Callable
 from pathlib import Path
 
 import pandas as pd
@@ -61,6 +62,8 @@ def saved_run(
     keep_program2: bool = True,
     empty: bool = False,
     note: str = "",
+    reviewed_by: str = "",
+    before_validate: Callable[[Path], None] | None = None,
 ) -> Path:
     run = project / "reports/runs/pipeline-test"
     run.mkdir(parents=True)
@@ -70,6 +73,8 @@ def saved_run(
             (run / name).mkdir()
         else:
             shutil.copytree(chain / name, run / name)
+    if before_validate is not None:
+        before_validate(run)
     sources = (
         StageSource.HUMAN_REFERENCE,
         StageSource.HUMAN_REFERENCE,
@@ -78,7 +83,9 @@ def saved_run(
     result = validate_pipeline(
         ROOT,
         *(
-            StageInput(source=source, output_directory=run / name, note=note)
+            StageInput(
+                source=source, output_directory=run / name, note=note, reviewed_by=reviewed_by
+            )
             for name, source in zip(names, sources, strict=True)
         ),
     )
@@ -183,3 +190,65 @@ def test_other_layouts_still_unsupported(tmp_path: Path) -> None:
     run.mkdir(parents=True)
     with pytest.raises(ValueError, match="unsupported run layout"):
         write_run_report(tmp_path, run)
+
+
+def test_missing_stage_folder_cannot_be_verified_or_release_totals(
+    chain: Path, tmp_path: Path
+) -> None:
+    run = saved_run(chain, tmp_path)
+    shutil.move(run / "program0", tmp_path / "program0-moved")
+    data, cms, technical = report(tmp_path, run)
+    assert data["record_status"] == "PASS"
+    assert data["scope_status"] == "NOT VERIFIED"
+    assert "Program 0:output_directory_missing_or_unsafe" in data["unverified_evidence"]
+    assert data["hospitals_processed"] is None
+    assert data["star_distribution"] is None
+    assert "Star rating" not in cms
+    assert "cannot be VERIFIED" in cms
+    assert "Program 0:output_directory_missing_or_unsafe" in technical
+
+
+def test_partly_rechecked_stage_cannot_be_verified(chain: Path, tmp_path: Path) -> None:
+    run = saved_run(chain, tmp_path)
+    record_path = run / "pipeline-validation.json"
+    record = json.loads(record_path.read_text())
+    first = next(iter(record["stages"][1]["output_hashes"]))
+    del record["stages"][1]["output_hashes"][first]
+    record_path.write_text(json.dumps(record))
+    data, _, _ = report(tmp_path, run)
+    assert data["scope_status"] != "VERIFIED"
+    assert "Program 1:only_4_of_5_outputs_rechecked" in data["unverified_evidence"]
+    assert data["star_distribution"] is None
+
+
+def test_cms_summary_names_no_provider_but_technical_keeps_the_key(
+    chain: Path, tmp_path: Path
+) -> None:
+    def corrupt(run: Path) -> None:
+        path = run / "program1" / "process.csv"
+        frame = load_artifact(path, key="PROVIDER_ID").frame
+        row = int(frame.index[frame["GRP_SCORE"].notna()][0])
+        frame.loc[row, "GRP_SCORE"] = frame.loc[row, "GRP_SCORE"] + 1e-6
+        _write(frame, path)
+
+    run = saved_run(chain, tmp_path, before_validate=corrupt)
+    record = json.loads((run / "pipeline-validation.json").read_text())
+    key = record["earliest_divergence"]["key"]
+    assert key
+    data, cms, technical = report(tmp_path, run)
+    assert key not in cms
+    assert "Earliest divergence: Program 1, artifact PROCESS, value; column GRP_SCORE" in cms
+    assert "mismatched cells" in cms
+    assert f"key {key}" in technical
+    assert key not in (data["earliest_divergence_cms"] or "")
+
+
+def test_recorded_review_is_shown_without_changing_the_origin(chain: Path, tmp_path: Path) -> None:
+    run = saved_run(chain, tmp_path, reviewed_by="A. Teammate")
+    data, cms, technical = report(tmp_path, run)
+    program2 = data["stages"][2]
+    assert program2["code_origin"] == "helper-assisted model output"
+    assert program2["reviewed_by"] == "A. Teammate"
+    assert "reviewed by A. Teammate" in cms
+    assert "no recorded human review" not in cms
+    assert "Human review: recorded for" in technical

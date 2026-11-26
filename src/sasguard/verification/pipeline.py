@@ -125,6 +125,9 @@ class StageInput(BaseModel):
     output_directory: Path
     code_path: Path | None = None
     note: str = ""
+    # Who reviewed this stage's code. Kept separate from ``source``: review never changes
+    # where the code came from.
+    reviewed_by: str = ""
 
 
 class Divergence(BaseModel):
@@ -166,6 +169,7 @@ class StageResult(BaseModel):
     helper_assisted_model_output: bool
     manually_corrected_model_output: bool
     note: str = ""
+    reviewed_by: str = ""
     output_directory: str
     status: StageStatus
     own_status: StageStatus
@@ -349,6 +353,7 @@ def _result(
         program=program,
         source=stage.source,
         note=stage.note,
+        reviewed_by=stage.reviewed_by,
         output_directory=stage.output_directory.name,
         status=status,
         own_status=status,

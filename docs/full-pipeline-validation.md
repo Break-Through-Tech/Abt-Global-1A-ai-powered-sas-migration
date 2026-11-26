@@ -57,9 +57,16 @@ FASTCLUS helpers in `src/sasguard/semantics`. Those helpers raise
 review. With `--run-reference-program2` the stage is therefore recorded as
 `helper_assisted_model_output` (the FASTCLUS helpers are used) with the note "Program 2
 reference implementation pending teammate review", and the file's hash is recorded in
-`source_hashes`. `--program2-source human_reference` is accepted only when explicitly
-passed, which should happen after the review is recorded. Other source labels are rejected
-with this flag. A `PASS` is therefore not a "human Program 2" result.
+`source_hashes`. The origin is fixed: `--program2-source` is rejected with this flag, so the
+same bundled code can never be relabelled `human_reference`. After a teammate reviews the
+file, record that with `--program2-reviewed-by "<name>"`. The review is stored in the stage's
+`reviewed_by` field and shown in the reports; the origin stays
+`helper_assisted_model_output`. A `PASS` is therefore not a "human Program 2" result.
+
+`report-run` only labels a run `VERIFIED` when every stage's recorded outputs are present
+in the run directory and re-hash to the recorded values. A missing or partly re-checked
+stage folder makes the report `NOT VERIFIED` and withholds hospital totals. The CMS summary
+never names a provider; the first differing key stays in the technical record.
 
 ## What is checked
 

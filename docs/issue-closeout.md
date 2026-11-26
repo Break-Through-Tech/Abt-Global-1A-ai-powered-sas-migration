@@ -252,8 +252,8 @@ Recommended actions use three labels: **close after PR 77 merges**, **keep open*
   Program 2 `STAR_2025JUL`, missing output); that needs an empty `--program2-output`
   directory because `--run-human-references` alone exits 2. A wrong Program 0 value is caught
   at Program 0 with Programs 1 and 2 marked `upstream_failure`.
-- Still needs: teammate review of `reference_python/program2.py` (until then no
-  `human_reference` label); Tony's independent replay recorded in the issue (OS, commit,
+- Still needs: teammate review of `reference_python/program2.py`, recorded with
+  `--program2-reviewed-by` (the origin stays `helper_assisted_model_output`); Tony's independent replay recorded in the issue (OS, commit,
   image ID, pass counts, STAR mismatches, integrity result; use a host run so the commit and
   OS are recorded, a Docker run records commit `unknown`); model-candidate chains for #68 and
   #70.

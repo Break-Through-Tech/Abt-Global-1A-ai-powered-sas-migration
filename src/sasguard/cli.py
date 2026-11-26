@@ -299,6 +299,7 @@ def program01_chain_command(
 
 
 REFERENCE_PROGRAM2_NOTE = "Program 2 reference implementation pending teammate review"
+REFERENCE_PROGRAM2_REVIEWED_NOTE = "Program 2 reference implementation, teammate review recorded"
 
 
 @app.command("validate-pipeline")
@@ -309,10 +310,17 @@ def validate_pipeline_command(
     program2_source: Annotated[
         StageSource | None,
         typer.Option(
-            help="Where the Program 2 output came from. With --run-reference-program2 this "
-            "defaults to helper_assisted_model_output; human_reference only if passed."
+            help="Where the Program 2 output came from. Not allowed with "
+            "--run-reference-program2, whose origin is fixed as helper_assisted_model_output."
         ),
     ] = None,
+    program2_reviewed_by: Annotated[
+        str,
+        typer.Option(
+            help="Teammate who reviewed the Program 2 code. Recorded separately; it does not "
+            "change the code origin."
+        ),
+    ] = "",
     run_reference_program2: Annotated[
         bool,
         typer.Option(
@@ -382,14 +390,11 @@ def validate_pipeline_command(
     if run_reference_program2 and program2_output:
         typer.echo("--run-reference-program2 cannot be combined with --program2-output.", err=True)
         raise typer.Exit(code=2)
-    if run_reference_program2 and program2_source not in (
-        None,
-        StageSource.HELPER_ASSISTED_MODEL_OUTPUT,
-        StageSource.HUMAN_REFERENCE,
-    ):
+    if run_reference_program2 and program2_source is not None:
         typer.echo(
-            "--run-reference-program2 allows only helper_assisted_model_output (default) "
-            "or human_reference as --program2-source.",
+            "--run-reference-program2 records its origin as helper_assisted_model_output; "
+            "--program2-source cannot change it. Record a teammate review with "
+            "--program2-reviewed-by.",
             err=True,
         )
         raise typer.Exit(code=2)
@@ -412,10 +417,14 @@ def validate_pipeline_command(
         if run_reference_program2:
             program2_output = run / "program2"
             produce_program2(root, program0_output, program1_output, program2_output)
-            program2_source = program2_source or StageSource.HELPER_ASSISTED_MODEL_OUTPUT
+            program2_source = StageSource.HELPER_ASSISTED_MODEL_OUTPUT
             program2_code = program2_code or root / PROGRAM2_REFERENCE
             if not program2_note:
-                program2_note = REFERENCE_PROGRAM2_NOTE
+                program2_note = (
+                    REFERENCE_PROGRAM2_REVIEWED_NOTE
+                    if program2_reviewed_by.strip()
+                    else REFERENCE_PROGRAM2_NOTE
+                )
         if program2_output is None or program2_source is None:
             raise ValueError("Program 2 needs --program2-output and --program2-source")
         result = validate_pipeline(
@@ -431,6 +440,7 @@ def validate_pipeline_command(
                 output_directory=program2_output,
                 code_path=program2_code,
                 note=program2_note,
+                reviewed_by=program2_reviewed_by.strip(),
             ),
         )
     except (OSError, ValueError) as error:

@@ -90,6 +90,7 @@ class StageRow(BaseModel):
     handoff: Literal["not_applicable", "passed", "failed"]
     handoff_artifacts_checked: int
     note: str
+    reviewed_by: str
     output_files_rechecked: int
     output_directory: str
 
@@ -113,6 +114,7 @@ class PipelineRunReport(BaseModel):
     stages: tuple[StageRow, ...]
     artifacts: tuple[ArtifactRow, ...]
     earliest_divergence: str | None
+    earliest_divergence_cms: str | None
     integrity_before: str
     integrity_after: str
     policy_audit: tuple[str, ...]
@@ -121,6 +123,7 @@ class PipelineRunReport(BaseModel):
     star_distribution: dict[str, int] | None
     counts_note: str
     evidence_issues: tuple[str, ...]
+    unverified_evidence: tuple[str, ...]
     record_hashes: dict[str, str]
     environment: dict[str, str]
     environment_sha256: str
@@ -131,6 +134,27 @@ class PipelineRunReport(BaseModel):
     client_release_approved: Literal[False] = False
 
 
+FIXED_DETAILS = frozenset(
+    {
+        "file is missing",
+        "file is present but could not be read or compared",
+        "copied input differs from the actual upstream output",
+        "protected files changed or could not be verified",
+        "comparison tolerance differs from the fixed 1e-12 contract",
+        "schema differs from the SAS artifact",
+        "keys differs from the SAS artifact",
+    }
+)
+COUNT_DETAIL = re.compile(r"\d+ mismatched cells, \d+ missingness mismatches")
+
+
+def _fixed_wording(kind: str, detail: str) -> bool:
+    """True when a divergence detail comes from a fixed template that names no provider."""
+    if kind == "value":
+        return COUNT_DETAIL.fullmatch(detail) is not None
+    return detail in FIXED_DETAILS
+
+
 def _integrity_text(values: dict[str, int | bool]) -> str:
     return (
         f"{values.get('checked_files')}/{values.get('expected_files')} "
@@ -138,11 +162,18 @@ def _integrity_text(values: dict[str, int | bool]) -> str:
     )
 
 
-def _recheck(run: Path, stage: StageResult, issues: list[str]) -> tuple[int, Path | None]:
-    """Re-hash recorded stage outputs that are inside the run directory."""
+def _recheck(
+    run: Path, stage: StageResult, issues: list[str], unverified: list[str]
+) -> tuple[int, Path | None]:
+    """Re-hash recorded stage outputs that are inside the run directory.
+
+    Changed or vanished files are record problems. A stage whose outputs cannot be
+    re-checked at all, or only in part, is unverified evidence: the run cannot be VERIFIED.
+    """
     name = Path(stage.output_directory).name
     directory = run / name
     if not name or directory.is_symlink() or not directory.is_dir():
+        unverified.append(f"{stage.program}:output_directory_missing_or_unsafe")
         return 0, None
     checked = 0
     for filename, digest in stage.output_hashes.items():
@@ -153,6 +184,9 @@ def _recheck(run: Path, stage: StageResult, issues: list[str]) -> tuple[int, Pat
         checked += 1
         if sha256_file(path, normalize_text=False) != digest:
             issues.append(f"{stage.program}:{filename}:output_changed_since_record")
+    expected = len(stage.artifacts)
+    if checked < expected:
+        unverified.append(f"{stage.program}:only_{checked}_of_{expected}_outputs_rechecked")
     return checked, directory
 
 
@@ -210,6 +244,7 @@ def read_pipeline_report(project_root: Path, run_directory: Path) -> PipelineRun
         raise ValueError("pipeline-validation.json is not a valid pipeline record") from error
 
     issues: list[str] = []
+    unverified: list[str] = []
     _consistency(record, issues)
     summary = run / "summary.md"
     if summary.is_file() and summary.read_text(encoding="utf-8") != render_summary(record):
@@ -217,7 +252,7 @@ def read_pipeline_report(project_root: Path, run_directory: Path) -> PipelineRun
     rechecked: dict[str, int] = {}
     directories: dict[int, Path | None] = {}
     for stage in record.stages:
-        count, directory = _recheck(run, stage, issues)
+        count, directory = _recheck(run, stage, issues, unverified)
         rechecked[stage.program] = count
         directories[stage.stage] = directory
 
@@ -260,6 +295,7 @@ def read_pipeline_report(project_root: Path, run_directory: Path) -> PipelineRun
             else ("passed" if stage.handoff_passed else "failed"),
             handoff_artifacts_checked=len(stage.handoff),
             note=_clean(stage.note),
+            reviewed_by=_clean(stage.reviewed_by),
             output_files_rechecked=rechecked[stage.program],
             output_directory=_clean(stage.output_directory),
         )
@@ -271,15 +307,22 @@ def read_pipeline_report(project_root: Path, run_directory: Path) -> PipelineRun
     )
     if issues or record.status == "FAIL":
         scope_status: Literal["VERIFIED", "NOT VERIFIED", "FAILED"] = "FAILED"
-    elif record.status == "PASS" and integrity_ok and not record.policy_audit:
+    elif record.status == "PASS" and integrity_ok and not record.policy_audit and not unverified:
         scope_status = "VERIFIED"
     else:
         scope_status = "NOT VERIFIED"
 
+    # Totals are released only when every stage's recorded outputs were re-checked intact.
     totals = (
-        _totals(directories.get(2), record.stages[2], record) if len(record.stages) == 3 else None
+        _totals(directories.get(2), record.stages[2], record)
+        if len(record.stages) == 3 and not unverified and not issues
+        else None
     )
-    counts_note = "Program 2 output was not found in the run directory or did not match its record."
+    counts_note = (
+        "Program 2 output was not found in the run directory or did not match its record."
+        if not unverified and not issues
+        else "Not every stage's recorded outputs could be re-checked in the run directory."
+    )
     processed = eligible = None
     distribution = None
     if totals is not None:
@@ -300,6 +343,20 @@ def read_pipeline_report(project_root: Path, run_directory: Path) -> PipelineRun
             f"{divergence.detail}"
         )
     )
+    # The CMS draft names no provider; the key stays in the technical record.
+    divergence_cms = (
+        None
+        if divergence is None
+        else _clean(
+            f"{divergence.program}, artifact {divergence.artifact}, {divergence.kind}; "
+            f"column {divergence.column or 'n/a'}. "
+            + (
+                divergence.detail
+                if _fixed_wording(divergence.kind, divergence.detail)
+                else "Details are in the technical record."
+            )
+        )
+    )
     return PipelineRunReport(
         scope_status=scope_status,
         record_status=record.status,
@@ -316,6 +373,7 @@ def read_pipeline_report(project_root: Path, run_directory: Path) -> PipelineRun
         stages=stage_rows,
         artifacts=tuple(rows),
         earliest_divergence=divergence_text,
+        earliest_divergence_cms=divergence_cms,
         integrity_before=_integrity_text(record.integrity_before),
         integrity_after=_integrity_text(record.integrity_after),
         policy_audit=tuple(_clean(item) for item in record.policy_audit),
@@ -324,6 +382,7 @@ def read_pipeline_report(project_root: Path, run_directory: Path) -> PipelineRun
         star_distribution=distribution,
         counts_note=counts_note,
         evidence_issues=tuple(sorted(set(issues))),
+        unverified_evidence=tuple(sorted(set(unverified))),
         record_hashes={RECORD: sha256_file(record_path, normalize_text=False)},
         environment={
             key: _clean(record.environment[key])
@@ -347,6 +406,18 @@ def _md(value: object) -> str:
         return "n/a"
     text = _clean(value).replace("|", "\\|")
     return text
+
+
+def _note(stage: StageRow) -> str:
+    parts = [_md(stage.note)] if stage.note else []
+    if stage.reviewed_by:
+        parts.append(f"reviewed by {_md(stage.reviewed_by)} (as recorded at run time)")
+    return "; ".join(parts) or "none"
+
+
+def _review_summary(report: PipelineRunReport) -> str:
+    reviewed = [f"{_md(s.program)} by {_md(s.reviewed_by)}" for s in report.stages if s.reviewed_by]
+    return ("recorded for " + ", ".join(reviewed)) if reviewed else "not recorded"
 
 
 def render_pipeline_handoff(report: PipelineRunReport) -> str:
@@ -395,15 +466,30 @@ def render_pipeline_handoff(report: PipelineRunReport) -> str:
     )
     lines.extend(
         f"| {_md(s.program)} | {_md(s.code_origin)} | {_md(s.status)} "
-        f"({s.artifacts_passed}/{s.artifacts_total} artifacts) | {_md(s.note) or 'none'} |"
+        f"({s.artifacts_passed}/{s.artifacts_total} artifacts) | {_note(s)} |"
         for s in report.stages
     )
-    if any(s.code_origin != ORIGINS["human_reference"] for s in report.stages):
+    unreviewed = [
+        s
+        for s in report.stages
+        if s.code_origin != ORIGINS["human_reference"] and not s.reviewed_by
+    ]
+    if unreviewed:
         lines.extend(
             [
                 "",
-                "Stages not marked as human reference were not written by a team member and "
-                "have no recorded human review. A matching result does not replace that review.",
+                "Stages not marked as human reference were not written by a team member; "
+                + ", ".join(_md(s.program) for s in unreviewed)
+                + " have no recorded human review. A matching result does not replace that "
+                "review.",
+            ]
+        )
+    if report.unverified_evidence:
+        lines.extend(
+            [
+                "",
+                "Not every stage's outputs could be re-checked against the record, so this run "
+                "cannot be VERIFIED: " + ", ".join(_md(i) for i in report.unverified_evidence),
             ]
         )
     lines.extend(["", "## Hospitals", ""])
@@ -436,13 +522,13 @@ def render_pipeline_handoff(report: PipelineRunReport) -> str:
             "data themselves.",
             "* Not checked: any release other than July 2025, SAS runtime behaviour, statistical "
             "correctness of the CMS method, and generated-code quality.",
-            "* Human review and Abt approval: not recorded.",
+            "* Human review: " + _review_summary(report) + ". Abt approval: not recorded.",
         ]
     )
     if report.evidence_issues:
         lines.extend(["", "Record problems: " + ", ".join(_md(i) for i in report.evidence_issues)])
-    if report.earliest_divergence:
-        lines.extend(["", f"Earliest divergence: {_md(report.earliest_divergence)}"])
+    if report.earliest_divergence_cms:
+        lines.extend(["", f"Earliest divergence: {_md(report.earliest_divergence_cms)}"])
     return "\n".join(lines) + "\n"
 
 
@@ -464,7 +550,7 @@ def render_pipeline_technical(report: PipelineRunReport) -> str:
         f"Protected-file integrity before: {report.integrity_before}; "
         f"after: {report.integrity_after}",
         "Policy audit: " + ("; ".join(map(_md, report.policy_audit)) or "passed"),
-        "Human review: not recorded",
+        "Human review: " + _review_summary(report),
         "",
         "## Stages",
         "",
@@ -475,7 +561,7 @@ def render_pipeline_technical(report: PipelineRunReport) -> str:
     lines.extend(
         f"| {_md(s.program)} | {_md(s.code_origin)} | {_md(s.status)} | {_md(s.own_status)} "
         f"| {s.artifacts_passed}/{s.artifacts_total} | {s.handoff} ({s.handoff_artifacts_checked}) "
-        f"| {s.output_files_rechecked} | {_md(s.output_directory)} | {_md(s.note) or 'none'} |"
+        f"| {s.output_files_rechecked} | {_md(s.output_directory)} | {_note(s)} |"
         for s in report.stages
     )
     lines.extend(
@@ -499,6 +585,7 @@ def render_pipeline_technical(report: PipelineRunReport) -> str:
         [
             "Evidence issues: "
             + (", ".join(map(_md, report.evidence_issues)) or "none found by these checks"),
+            "Unverified evidence: " + (", ".join(map(_md, report.unverified_evidence)) or "none"),
             "",
             "## Hashes",
             "",

@@ -284,10 +284,11 @@ one column never implies another.
 | Who wrote the code (code origin)? | stage `Source` | `human_reference`, `direct_model_output`, `helper_assisted_model_output`, `manually_corrected_model_output`; `not_recorded` when unknown |
 | Did it run (execution)? | execution reports, attempt records | succeeded or failed, separate from collection of outputs |
 | Does it match SAS (validation)? | `validate-pipeline` | `PASS`, `PARTIAL`, `FAIL`; per artifact passed, failed, missing, malformed, `upstream_failure`; report labels `VERIFIED`, `NOT VERIFIED`, `FAILED` |
-| Has a person reviewed it (human review)? | reports | always `not_recorded` today; Abt approval is separate |
+| Has a person reviewed it (human review)? | stage `reviewed_by`, reports | empty / "not recorded" unless `--program2-reviewed-by` was passed; never changes code origin; Abt approval is separate |
 
-`VERIFIED` means all recorded comparisons agreed with themselves and the files, within the
-supplied July 2025 SAS artifacts. It is not a human review and not CMS approval.
+`VERIFIED` means all recorded comparisons agreed with themselves and with every stage's
+re-hashed output files, within the supplied July 2025 SAS artifacts. A missing stage folder
+gives `NOT VERIFIED`. It is not a human review and not CMS approval.
 
 ## Limits to state
 
