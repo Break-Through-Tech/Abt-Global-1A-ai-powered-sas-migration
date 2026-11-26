@@ -30,8 +30,8 @@ Two pieces of work are now on this branch and were verified in that run:
   (CMS summary), `technical.md` (Abt record) and `report.json`. The PASS run rendered
   `VERIFIED`; a deliberately wrong run (one Program 0 value changed) rendered `NOT VERIFIED`
   with the earliest divergence. Abt has not confirmed the field list. The short CMS
-  `handoff.md` shows the Program 2 origin but not the "pending teammate review" note, which
-  only `technical.md` and `report.json` carry.
+  `handoff.md`, `technical.md` and `report.json` all carry the Program 2 "pending teammate
+  review" note.
 
 Recommended actions use three labels: **close after PR 77 merges**, **keep open**,
 **close as superseded**. "Close" always means after a teammate has checked the evidence.

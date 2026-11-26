@@ -359,7 +359,14 @@ def render_pipeline_handoff(report: PipelineRunReport) -> str:
         f"Validation status: {label}",
         f"Input release: {report.input_release}",
         f"Run date: {report.run_date} ({report.run_date_source})",
-        f"{report.artifacts_passed} of {report.artifacts_total} SAS artifact comparisons passed.",
+        (
+            f"{report.artifacts_passed} of {report.artifacts_total} SAS artifact comparisons "
+            "passed."
+            if not report.evidence_issues
+            else f"The record claims {report.artifacts_passed} of {report.artifacts_total} SAS "
+            "artifact comparisons passed, but the record could not be confirmed, so that count "
+            "is not relied on."
+        ),
         "",
     ]
     if label == "VERIFIED":
@@ -417,8 +424,14 @@ def render_pipeline_handoff(report: PipelineRunReport) -> str:
     lines.extend(["", "## What was and was not checked", ""])
     lines.extend(
         [
-            "* Verified against the supplied SAS artifacts: the ten comparison artifacts and "
-            "the copied handoffs between programs, within the fixed 1e-12 tolerance.",
+            (
+                "* Verified against the supplied SAS artifacts: the ten comparison artifacts and "
+                "the copied handoffs between programs, within the fixed 1e-12 tolerance."
+                if label == "VERIFIED"
+                else "* Compared against the supplied SAS artifacts: the ten comparison artifacts "
+                "and the copied handoffs between programs, within the fixed 1e-12 tolerance. "
+                "This run did not verify them; see the status above."
+            ),
             "* Trusted, not independently verified: the supplied SAS outputs and the CMS input "
             "data themselves.",
             "* Not checked: any release other than July 2025, SAS runtime behaviour, statistical "

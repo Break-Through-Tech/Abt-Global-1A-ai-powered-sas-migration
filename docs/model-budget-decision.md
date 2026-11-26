@@ -88,8 +88,8 @@ recorded in this draft; the preview reports byte counts only, which are not toke
 ## 4. Credential handling
 
 - The key is read only from the environment variable `SASGUARD_API_KEY` on the host
-  (`program0_model.py`, `program2_model.py`). Both controllers refuse to start without it;
-  Program 2 also requires at least 16 characters.
+  (`program0_model.py`, `program2_model.py`). Both controllers refuse to start without it,
+  and both reject keys shorter than 16 characters.
 - Enter it interactively, never on a command line and never in a file. The documented
   commands use `Read-Host -AsSecureString` (PowerShell) and `read -s` (zsh), then remove the
   variable after the run.

@@ -149,6 +149,8 @@ def test_tampered_output_fails_and_is_named(chain: Path, tmp_path: Path) -> None
     assert data["scope_status"] == "FAILED"
     assert any("output_changed_since_record" in item for item in data["evidence_issues"])
     assert "Star rating" not in cms
+    assert "comparisons passed, but the record could not be confirmed" in cms
+    assert "Verified against the supplied SAS artifacts" not in cms
 
 
 def test_edited_record_status_is_not_trusted(chain: Path, tmp_path: Path) -> None:

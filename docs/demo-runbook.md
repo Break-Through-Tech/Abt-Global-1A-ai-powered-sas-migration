@@ -220,9 +220,9 @@ Expect for the passing run: `Validation status: VERIFIED`, 10 of 10, 4,566 hospi
 code origin per stage, "Human review and Abt approval: not recorded". For the wrong run:
 `Validation status: NOT VERIFIED`, 6 of 10, no hospital counts, and the earliest divergence.
 Say: the report only reads the saved record, reruns nothing, and a tampered record renders as
-`FAILED`. Point out that `technical.md` carries the Program 2 "pending teammate review" note;
-the short CMS `handoff.md` shows "helper-assisted model output" but not that note, so say it
-aloud. Abt has not confirmed the final field list. Check both files for credentials and
+`FAILED`. Point out that both `handoff.md` and `technical.md` carry the Program 2 "pending
+teammate review" note, and that the CMS summary states non-human stages have no recorded
+human review. Abt has not confirmed the final field list. Check both files for credentials and
 unapproved data before sharing anything (none were found in the dry run; the check is not a
 general secret scanner).
 
@@ -388,5 +388,5 @@ stale after a rebuild; rebuild after every pull.
 What was not run: a clean clone, macOS zsh, a second computer, the Docker-gated suite beyond
 steps 7, any model call, licensed SAS. Findings during the dry run: the pipeline documentation
 claimed `--run-human-references` alone yields PARTIAL (it exits 2; corrected), and the short
-CMS `handoff.md` omits the Program 2 "pending teammate review" note that `technical.md` and
-`report.json` carry.
+CMS `handoff.md` omitted the Program 2 "pending teammate review" note (fixed in a763284; the
+CMS summary now shows each stage's note and the human-review caveat).
