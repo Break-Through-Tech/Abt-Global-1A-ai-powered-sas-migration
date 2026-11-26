@@ -352,6 +352,45 @@ def test_malformed_output_is_reported_per_program(
     assert divergence.kind in {"malformed_output", "schema", "keys"}
 
 
+@pytest.mark.parametrize(
+    ("damage", "kind"),
+    [("delete", "missing_output"), ("empty", "malformed_output"), ("garbage", "malformed_output")],
+)
+def test_broken_later_program0_file_is_named_not_the_first_artifact(
+    work: Path, damage: str, kind: str
+) -> None:
+    """The divergence names the broken file, not an earlier file left uncompared."""
+    path = work / "p0" / ANALYSIS
+    if damage == "delete":
+        path.unlink()
+    elif damage == "empty":
+        path.write_text("", encoding="utf-8")
+    else:
+        path.write_text("not,a\nvalid", encoding="utf-8")
+    result = validate_pipeline(
+        ROOT, *stages(work, p0=StageSource.DIRECT_MODEL_OUTPUT, p2=StageSource.DIRECT_MODEL_OUTPUT)
+    )
+    divergence = result.earliest_divergence
+    assert divergence is not None
+    assert (divergence.stage, divergence.artifact, divergence.kind) == (
+        0,
+        "STD_DATA_2025JUL_ANALYSIS",
+        kind,
+    )
+    assert divergence.detail != "output could not be compared"
+
+
+def test_missing_program2_file_detail_says_missing(work: Path) -> None:
+    (work / "p2" / "star_2025jul.csv").unlink()
+    divergence = run(work).earliest_divergence
+    assert divergence is not None
+    assert (divergence.stage, divergence.kind, divergence.detail) == (
+        2,
+        "missing_output",
+        "file is missing",
+    )
+
+
 def test_missing_key_column_is_malformed_not_a_pass(work: Path) -> None:
     path = work / "p1" / "outcome_mortality.csv"
     write(read(path).drop(columns="PROVIDER_ID"), path)

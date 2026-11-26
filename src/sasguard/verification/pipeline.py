@@ -602,18 +602,28 @@ def locate_divergence(
 ) -> Divergence:
     """Find the first failing artifact of a failing stage and its first differing key/column."""
     stage_input = inputs[result.stage]
-    for outcome in result.artifacts:
-        if outcome.passed:
-            continue
+    failing = [outcome for outcome in result.artifacts if not outcome.passed]
+    # A validator that stops at the first missing or malformed file leaves the other
+    # artifacts uncompared with no error. Those are not divergences, so prefer the
+    # artifacts that were actually judged or that carry their own error.
+    judged = [o for o in failing if o.comparison is not None or o.error is not None]
+    for outcome in judged or failing:
         comparison = outcome.comparison
         if comparison is None:
-            missing = result.status == "missing_outputs" or outcome.error == "file is missing"
+            present = find_output_file(stage_input.output_directory, outcome.filename)
+            missing = outcome.error == "file is missing" or present is None
+            if missing:
+                detail = "file is missing"
+            elif outcome.error and outcome.error != "missing_or_malformed_output":
+                detail = outcome.error
+            else:
+                detail = "file is present but could not be read or compared"
             return Divergence(
                 stage=result.stage,
                 program=result.program,
                 artifact=outcome.artifact,
                 kind="missing_output" if missing else "malformed_output",
-                detail=outcome.error or "output could not be compared",
+                detail=detail,
             )
         structural: tuple[DivergenceKind, str | None, str | None] | None = None
         if comparison.missing_columns:
