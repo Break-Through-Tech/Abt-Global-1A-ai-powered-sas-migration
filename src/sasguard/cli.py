@@ -3,6 +3,7 @@
 import csv
 from pathlib import Path
 from typing import Annotated
+from uuid import uuid4
 
 import pyreadstat
 import typer
@@ -19,6 +20,8 @@ from sasguard.program0 import translate_program0
 from sasguard.prototypes.local_model import run_local_model_smoke, run_local_model_suite
 from sasguard.prototypes.local_model_reassessment import reassess_local_model_suite
 from sasguard.prototypes.mortality import run_mortality_prototype
+from sasguard.prototypes.pipeline_reference import run_human_program0 as produce_program0
+from sasguard.prototypes.pipeline_reference import run_human_program1 as produce_program1
 from sasguard.prototypes.program0_model import ModelSettings, run_program0_model
 from sasguard.prototypes.program0_prompt import (
     PromptInputFormat,
@@ -29,6 +32,12 @@ from sasguard.prototypes.program01 import run_program01_chain
 from sasguard.prototypes.program2_model import run_program2_model
 from sasguard.reporting import write_run_report
 from sasguard.verification.integrity import load_and_verify_integrity
+from sasguard.verification.pipeline import (
+    StageInput,
+    StageSource,
+    render_summary,
+    validate_pipeline,
+)
 
 app = typer.Typer(
     name="sasguard",
@@ -284,6 +293,117 @@ def program01_chain_command(
         )
     typer.echo("Program 1 is human-reference Python. Full pipeline and ratings are not verified.")
     if result.status != "passed":
+        raise typer.Exit(code=1)
+
+
+@app.command("validate-pipeline")
+def validate_pipeline_command(
+    program2_output: Annotated[
+        Path, typer.Option(help="Directory with the actual Program 2 output CSVs.")
+    ],
+    program2_source: Annotated[
+        StageSource, typer.Option(help="Where the Program 2 output came from.")
+    ],
+    run_human_references: Annotated[
+        bool,
+        typer.Option(
+            "--run-human-references",
+            help="Produce Program 0 and Program 1 outputs from the human references.",
+        ),
+    ] = False,
+    run_human_program1: Annotated[
+        bool,
+        typer.Option(
+            "--run-human-program1",
+            help="Produce Program 1 outputs from the human reference on --program0-output.",
+        ),
+    ] = False,
+    program0_output: Annotated[
+        Path | None, typer.Option(help="Directory with the actual Program 0 output CSVs.")
+    ] = None,
+    program0_source: Annotated[
+        StageSource | None, typer.Option(help="Where the Program 0 output came from.")
+    ] = None,
+    program1_output: Annotated[
+        Path | None, typer.Option(help="Directory with the actual Program 1 output CSVs.")
+    ] = None,
+    program1_source: Annotated[
+        StageSource | None, typer.Option(help="Where the Program 1 output came from.")
+    ] = None,
+    program0_code: Annotated[
+        Path | None, typer.Option(help="Candidate source file to hash for Program 0.")
+    ] = None,
+    program1_code: Annotated[
+        Path | None, typer.Option(help="Candidate source file to hash for Program 1.")
+    ] = None,
+    program2_code: Annotated[
+        Path | None, typer.Option(help="Candidate source file to hash for Program 2.")
+    ] = None,
+    program2_note: Annotated[str, typer.Option(help="Free-text provenance note.")] = "",
+    output_directory: Annotated[
+        Path | None, typer.Option(help="New directory under reports/runs for the record.")
+    ] = None,
+    project_root: Annotated[Path, typer.Option(help="Repository root.")] = Path("."),
+) -> None:
+    """Validate all ten Program 0, 1 and 2 artifacts on actual chained Python outputs.
+
+    Exits 0 only for PASS (all ten comparisons, both handoffs, integrity). PARTIAL and
+    FAIL exit 1 and report the earliest divergence.
+    """
+    root = project_root.resolve()
+    runs = (root / "reports" / "runs").resolve()
+    run = (output_directory or runs / f"pipeline-{uuid4()}").resolve()
+    if run == runs or not run.is_relative_to(runs) or run.exists():
+        typer.echo("Output must be a new subdirectory of reports/runs.", err=True)
+        raise typer.Exit(code=2)
+    if run_human_references and (program0_output or program1_output or run_human_program1):
+        typer.echo("--run-human-references cannot be combined with stage outputs.", err=True)
+        raise typer.Exit(code=2)
+    if run_human_program1 and program1_output:
+        typer.echo("--run-human-program1 cannot be combined with --program1-output.", err=True)
+        raise typer.Exit(code=2)
+    try:
+        run.mkdir(parents=True)
+        if run_human_references:
+            program0_output = run / "program0"
+            produce_program0(root, program0_output)
+            program0_source = StageSource.HUMAN_REFERENCE
+        if run_human_references or run_human_program1:
+            if program0_output is None:
+                raise ValueError("--run-human-program1 needs --program0-output")
+            program1_output = run / "program1"
+            produce_program1(root, program0_output, program1_output)
+            program1_source = StageSource.HUMAN_REFERENCE
+        if program0_output is None or program0_source is None:
+            raise ValueError("Program 0 needs --program0-output and --program0-source")
+        if program1_output is None or program1_source is None:
+            raise ValueError("Program 1 needs --program1-output and --program1-source")
+        result = validate_pipeline(
+            root,
+            StageInput(
+                source=program0_source, output_directory=program0_output, code_path=program0_code
+            ),
+            StageInput(
+                source=program1_source, output_directory=program1_output, code_path=program1_code
+            ),
+            StageInput(
+                source=program2_source,
+                output_directory=program2_output,
+                code_path=program2_code,
+                note=program2_note,
+            ),
+        )
+    except (OSError, ValueError) as error:
+        typer.echo(f"Pipeline validation could not complete: {error}", err=True)
+        raise typer.Exit(code=2) from error
+    (run / "pipeline-validation.json").write_text(
+        result.model_dump_json(indent=2) + "\n", encoding="utf-8"
+    )
+    summary = render_summary(result)
+    (run / "summary.md").write_text(summary, encoding="utf-8")
+    typer.echo(summary)
+    typer.echo(f"Evidence: {run}")
+    if result.status != "PASS":
         raise typer.Exit(code=1)
 
 
