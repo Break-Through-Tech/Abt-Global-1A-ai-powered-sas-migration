@@ -8,9 +8,9 @@ import pyreadstat
 import typer
 
 from sasguard import __version__
+from sasguard.config import load_project_configuration
 from sasguard.execution.program0 import run_program0_candidate
 from sasguard.execution.runner import RunnerLimits
-from sasguard.config import load_project_configuration
 from sasguard.program0 import translate_program0
 from sasguard.prototypes.local_model import run_local_model_smoke, run_local_model_suite
 from sasguard.prototypes.local_model_reassessment import reassess_local_model_suite
