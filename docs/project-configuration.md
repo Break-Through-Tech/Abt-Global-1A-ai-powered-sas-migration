@@ -13,6 +13,9 @@ The CMS July 2025 configuration is `configs/cms_2025jul.yaml`. It records:
 - one logical entry for each of the 10 supplied golden artifacts;
 - SAS7BDAT as the preferred numeric reference source;
 - the future repair loop's maximum attempt count.
+- an optional `release` section: the lowercase release `tag` (default `2025jul`) and the
+  `integrity_manifest` path (default `configs/protected-artifacts.json`), used by
+  `validate-pipeline --config` and `demo --config`.
 
 It contains paths and policy metadata only. It must not contain credentials, prompts, provider
 records, expected row-level values, or copied golden-output data.
@@ -56,6 +59,7 @@ The loader:
 - rejects absolute paths and parent-directory traversal;
 - normalizes Windows separators to portable forward slashes;
 - validates required filename extensions;
+- validates the release tag as lowercase letters and digits;
 - rejects duplicate programs, macros, artifacts, and reference filenames ignoring case;
 - resolves every path beneath the explicit repository root;
 - reports all missing configured directories and files together.

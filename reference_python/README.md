@@ -21,3 +21,22 @@ sasguard mortality-prototype --project-root . --image sasguard-runner:test
 
 See [`docs/mortality-prototype.md`](../docs/mortality-prototype.md) for setup, the
 column-level comparison policy, integrity checks, report contents, and scope limits.
+
+## Domain scoring and Program 2
+
+`domain_scoring.py` is the Program 1 human reference (five domain group scores).
+
+`program2.py` is the Program 2 reference: weighted summary score, reporting eligibility,
+per-peer-group K-means stars (reusing `sasguard.semantics` FASTCLUS helpers) and national
+averages. It reads only the Program 1 CSVs and Program 0's `std_data_2025jul_analysis.csv`
+and writes `star_2025jul.csv` and `national_average_2025jul.csv`.
+
+Review status: not written by a team member; pending teammate review. The pipeline command
+always labels it `helper_assisted_model_output`. A teammate review is recorded separately
+with `--program2-reviewed-by "<name>"` and does not change that origin. On the real July 2025 chain it matched both SAS artifacts, with no
+unresolved FASTCLUS behavior hit. See
+[`docs/full-pipeline-validation.md`](../docs/full-pipeline-validation.md).
+
+```sh
+sasguard validate-pipeline --run-human-references --run-reference-program2
+```

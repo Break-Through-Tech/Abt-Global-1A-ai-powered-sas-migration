@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "artifacts": {
+    "STAR_2025JUL": {
+      "keys": ["PROVIDER_ID"],
+      "default_numeric_tolerance": {"absolute": 0, "relative": 0},
+      "columns": [
+        {"name": "STD_OUTCOMES_MORTALITY_SCORE", "kind": "numeric", "tolerance": {"absolute": 1e-12, "relative": 1e-12}},
+        {"name": "STD_OUTCOMES_READMISSION_SCORE", "kind": "numeric", "tolerance": {"absolute": 1e-12, "relative": 1e-12}},
+        {"name": "STD_OUTCOMES_SAFETY_SCORE", "kind": "numeric", "tolerance": {"absolute": 1e-12, "relative": 1e-12}},
+        {"name": "STD_PATIENTEXP_SCORE", "kind": "numeric", "tolerance": {"absolute": 1e-12, "relative": 1e-12}},
+        {"name": "STD_PROCESS_SCORE", "kind": "numeric", "tolerance": {"absolute": 1e-12, "relative": 1e-12}},
+        {"name": "WEIGHT_PATIENTEXPERIENCE", "kind": "numeric", "tolerance": {"absolute": 1e-12, "relative": 1e-12}},
+        {"name": "WEIGHT_OUTCOMES_READMISSION", "kind": "numeric", "tolerance": {"absolute": 1e-12, "relative": 1e-12}},
+        {"name": "WEIGHT_OUTCOMES_MORTALITY", "kind": "numeric", "tolerance": {"absolute": 1e-12, "relative": 1e-12}},
+        {"name": "WEIGHT_OUTCOMES_SAFETY", "kind": "numeric", "tolerance": {"absolute": 1e-12, "relative": 1e-12}},
+        {"name": "WEIGHT_PROCESS", "kind": "numeric", "tolerance": {"absolute": 1e-12, "relative": 1e-12}},
+        {"name": "SUMMARY_SCORE", "kind": "numeric", "tolerance": {"absolute": 1e-12, "relative": 1e-12}},
+        {"name": "OUTCOMES_MORTALITY_CNT", "kind": "exact"},
+        {"name": "OUTCOMES_SAFETY_CNT", "kind": "exact"},
+        {"name": "OUTCOMES_READMISSION_CNT", "kind": "exact"},
+        {"name": "PATIENT_EXPERIENCE_CNT", "kind": "exact"},
+        {"name": "PROCESS_CNT", "kind": "exact"},
+        {"name": "TOTAL_MEASURE_GROUP_CNT", "kind": "exact"},
+        {"name": "MORTSAFE_GROUP_CNT", "kind": "exact"},
+        {"name": "REPORT_INDICATOR", "kind": "exact"},
+        {"name": "CNT_GRP", "kind": "exact"},
+        {"name": "STAR", "kind": "exact"}
+      ]
+    },
+    "NATIONAL_AVERAGE_2025JUL": {
+      "keys": ["__SASGUARD_ROW"],
+      "default_numeric_tolerance": {"absolute": 1e-12, "relative": 1e-12},
+      "columns": []
+    }
+  }
+}

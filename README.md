@@ -1,54 +1,163 @@
 # SASGuard
 
 SASGuard is a verification-guided, AI-assisted system for migrating legacy SAS analytics
-pipelines to Python. The project is being developed for the Break Through Tech AI Studio Fall
-2026 program in partnership with Abt Global.
+pipelines to Python. Built for the Break Through Tech AI Studio Fall 2026 program in
+partnership with Abt Global, using the CMS July 2025 Overall Hospital Quality Star Rating
+pipeline as the case study.
 
-Our primary case study is the CMS July 2025 Overall Hospital Quality Star Rating pipeline. The
-supplied project includes SAS programs, input datasets, logs, and trusted SAS output artifacts.
+**Python that runs is not a migration. Python whose outputs match SAS is.** SASGuard treats
+the supplied SAS outputs as the answer key. Models translate; ordinary, deterministic software
+executes the code in isolation, compares every output against SAS and decides pass or fail.
+The model never grades itself.
 
-## Why SASGuard
+## Results
 
-Producing Python code that runs is not enough to establish a correct migration. SASGuard treats
-the existing SAS outputs as trusted reference behavior. Generated Python must be executed and
-compared against those artifacts using deterministic validation software.
+| What we checked | Result |
+|---|---|
+| Full pipeline (Program 0 → 1 → 2), ten SAS output artifacts | **10 of 10 passed** |
+| Hospital star ratings (4,566 hospitals, 2,891 rated) | **0 mismatches** |
+| Numeric tolerance | 1e-12; stars, counts and categories exact |
+| Handoffs between programs | Each stage's input checked exactly against the previous stage's actual output |
+| Supplied SAS programs, data and outputs | 29/29 protected files unchanged before and after every run |
+| Automated tests | 818 passed, 31 skipped (Docker-gated) |
 
-The planned workflow is:
+| Program | Outputs | Code used in the 10/10 run |
+|---|---|---|
+| 0: data and measure standardization | 3/3 | Human-written reference |
+| 1: domain group scores | 5/5 | Human-written reference |
+| 2: weighted summary score, FASTCLUS clustering, stars | 2/2 | Reference implementation recorded as *helper-assisted model output*, pending teammate review |
 
-```text
-SAS source
-    -> translation
-    -> generated Python
-    -> isolated execution
-    -> deterministic validation
-    -> first-divergence diagnosis
-    -> constrained repair
-    -> verification report
+Every run writes an evidence record (source, input, output and policy hashes; environment;
+git commit) and the report step re-checks those hashes before it will call anything VERIFIED.
+See [Full-pipeline validation](docs/full-pipeline-validation.md).
+
+### What the models did
+
+These experiments translated real SAS source. Prompts contained the SAS programs, input column
+names and a runtime contract, and **never** hospital rows, trusted output values or human
+Python.
+
+- **Program 0, fixed by its own feedback loop.** `gpt-6-luna` failed its first attempt, then
+  passed all three artifacts after two automatic repairs driven only by validator
+  diagnostics, with no manual edits
+  ([experiment](docs/experiments/2026-11-10-program0-automatic-repair-v2.md)).
+- **Program 2, wrong in 2 of 2,891 star ratings, and the validator caught it.** The model's
+  best candidate matched every score, weight and peer group but missed two stars. We traced
+  the cause to SAS FASTCLUS `STRICT` behavior, confirmed it from SAS documentation, and with
+  that one correction the stars matched exactly
+  ([baseline](docs/experiments/2026-11-10-program2-luna-baseline.md),
+  [STRICT replay](docs/experiments/2026-11-16-program2-strict-replay.md)).
+- **Model-generated chain.** A fresh run using the model Program 0, the human Program 1 and
+  the corrected model Program 2 also passed all ten artifacts.
+- **Local models.** Small local models (Qwen3 4B, Qwen3.5 9B) were evaluated on synthetic SAS
+  cases, with and without tested SAS helper functions
+  ([comparison](docs/local-model-helper-comparison.md)).
+
+The point is not that a model got it right. The point is that **an executable but wrong
+translation cannot pass**, and the report says exactly where it first diverged.
+
+## How it works
+
+```mermaid
+flowchart LR
+    A[SAS source] --> B[Model translation]
+    B --> C[Isolated Docker runner<br/>no network, no SAS outputs]
+    C --> D[Deterministic validator<br/>align by PROVIDER_ID, fixed tolerances]
+    D -->|PASS| E[Evidence record]
+    D -->|FAIL| F[Earliest divergence<br/>+ structural feedback]
+    F --> G[Bounded repair]
+    G --> C
+    E --> H[Abt technical report<br/>CMS handoff summary]
 ```
 
-AI components perform translation and diagnostic reasoning. Ordinary software controls
-execution, artifact comparison, and pass or fail decisions.
+- **Isolation:** generated code runs in a network-disabled container that cannot see the
+  trusted SAS outputs ([isolated runner](docs/isolated-runner.md)).
+- **Validation:** rows aligned by `PROVIDER_ID`, missing values preserved, tolerances fixed
+  before any run ([comparison policy](docs/comparison-policy.md)).
+- **Diagnosis:** the validator names the earliest failing program, artifact, column and
+  row, so repair feedback is specific
+  ([full-pipeline validation](docs/full-pipeline-validation.md)).
+- **SAS semantics:** tested helpers for the behavior models get wrong, such as FASTCLUS seed
+  selection, STRICT distance handling and UNIVARIATE percentile definition 5
+  ([FASTCLUS](docs/fastclus-iteration.md)).
+- **Honest labels:** each stage records whether its code came from a human, a model, a model
+  with helpers or a manually corrected model, and review is recorded separately from origin.
+  A report is VERIFIED only when every stage's evidence is present and re-checked.
+- **Privacy:** model prompts carry no hospital data; CMS summaries carry no provider IDs or
+  unexpected column names.
 
-## Current status
+## Quickstart
 
-The project is in the Data Exploration and Setup milestone. Current work focuses on:
+Requires Git, Docker Desktop and Python 3.11 or 3.12. No API key or SAS license needed.
 
-- a reproducible Docker and VS Code development environment;
-- a maintainable Python package and automated quality checks;
-- inventorying the supplied SAS and data artifacts;
-- documenting the three SAS processing stages;
-- implementing trusted data loading and initial comparison utilities;
-- protecting supplied artifacts and recording reproducible run metadata.
+```text
+git clone https://github.com/Break-Through-Tech/Abt-Global-1A-ai-powered-sas-migration.git
+cd Abt-Global-1A-ai-powered-sas-migration
+python3.11 -m venv .venv          # Windows: py -3.11 -m venv .venv, and set PYTHONUTF8=1
+# Windows: .\.venv\Scripts\Activate.ps1    macOS: source .venv/bin/activate
+python -m pip install --require-hashes -r requirements.txt
+python -m pip install --no-deps --no-build-isolation -e .
+docker compose build
 
-No end-to-end parity result is claimed at this stage.
+sasguard verify-integrity
+sasguard validate-pipeline --run-human-references --run-reference-program2
+sasguard report-run reports/runs/pipeline-<UUID>
+```
 
-A bounded human-reference prototype reproduces the Program 1 Mortality
-`grp_score` calculation on the supplied Program 0 standardized SAS binary. Its
-first Docker run passed the comparison of 4,566 rows and 21 columns against the
-trusted Mortality output. This is not an LLM translation and does not establish
-full end-to-end correctness or coverage of all SAS semantics. See
-[Mortality prototype](docs/mortality-prototype.md) for its comparison rules,
-setup, and limits.
+Expected: `Integrity check passed: 29 protected files verified.`, then
+`Status: PASS. 10 of 10 artifact comparisons passed.` and `STAR mismatches: 0.` The last
+command writes `handoff.md` (CMS summary), `technical.md` (Abt) and `report.json` from the
+evidence directory printed by `validate-pipeline`.
+
+`sasguard demo` runs the integrity check, the pipeline and the reports in one step and also
+writes a self-contained `report.html`. Both `demo` and `validate-pipeline` take `--config PATH`
+for another release's configuration (see [adopting guide, section 3](docs/adopting-sasguard.md#3-using-it-on-a-new-cms-star-rating-release)).
+
+Adopting SASGuard at Abt: see [docs/adopting-sasguard.md](docs/adopting-sasguard.md).
+
+The full demo, including a deliberately wrong result that fails, a partial run, a recorded
+repair and both reports, is in the [November demo runbook](docs/demo-runbook.md). Docker-only
+setup, Dev Containers and JupyterLab are in [Development setup](docs/development-setup.md).
+
+## Limits
+
+- Validated on the supplied July 2025 release only. `--config` runs the pipeline for another
+  release, proven so far on renamed July data; the model workflows and mortality prototype are
+  July 2025 only.
+- Program 2's bundled reference is pending teammate review; it is labeled helper-assisted
+  model output, not human, and its output is not approved CMS ratings.
+- FASTCLUS helpers are based on SAS documentation; they have not yet been probed on
+  licensed SAS.
+- A model-generated Program 1 has not been attempted.
+- PASS means the outputs match the supplied SAS artifacts. It is not Abt or CMS approval.
+
+## Documentation
+
+| Topic | Docs |
+|---|---|
+| Pipeline and results | [Adopting SASGuard at Abt](docs/adopting-sasguard.md), [Full-pipeline validation](docs/full-pipeline-validation.md), [Demo runbook](docs/demo-runbook.md), [Issue close-out](docs/issue-closeout.md) |
+| SAS analysis | [Program 0](docs/program-0-analysis.md), [Program 1](docs/program-1-analysis.md), [Program 2 semantics](docs/program-2-sas-semantics.md), [Artifact inventory](docs/artifact-inventory.md) |
+| Model workflows | [Program 0](docs/program-0-model-workflow.md), [Program 2](docs/program-2-model-workflow.md), [Prompt preview](docs/program-0-prompt-preview.md), [Model budget (draft)](docs/model-budget-decision.md), [Experiments](docs/experiments/) |
+| Verification | [Comparison policy](docs/comparison-policy.md), [Artifact comparison](docs/artifact-comparison.md), [Data integrity](docs/data-integrity.md), [Golden trace](docs/golden-trace.md), [Wrong candidates](docs/program0-wrong-candidates.md) |
+| Reproducibility | [Reproducing a run](docs/reproducibility.md), [Run manifests](docs/run-manifests.md), [Isolated runner](docs/isolated-runner.md), [Reports](docs/scoped-run-reports.md) |
+| Local models | [Smoke test](docs/local-model-smoke.md), [Comparison](docs/local-model-comparison.md), [Helper comparison](docs/local-model-helper-comparison.md), [Numeric reassessment](docs/local-model-numeric-reassessment.md) |
+
+## Repository structure
+
+```text
+.
+|-- data/                  Supplied input, SAS source and trusted outputs (protected)
+|-- configs/               Protected-artifact manifest and pipeline configuration
+|-- src/sasguard/          Package: CLI, runner, validators, SAS semantics, reports
+|-- reference_python/      Human-written references and the Program 2 reference
+|-- tests/                 Automated tests
+|-- docs/                  Analysis, workflows, experiments and runbooks
+|-- scripts/               Isolated-runner and replay scripts
+|-- notebooks/             Exploratory notebooks
+|-- Dockerfile             Development image
+|-- Dockerfile.runner      Network-disabled runner for generated code
+`-- compose.yaml           Local container workflow
+```
 
 ## Team
 
@@ -61,110 +170,12 @@ setup, and limits.
 | Hailey Muñiz | [@haileybella](https://github.com/haileybella) | Program 2 analysis and contributor documentation |
 | Loana-Ardi Igabaneza | [@Loaardi](https://github.com/Loaardi) | Data loaders and artifact comparison |
 
-## Repository structure
-
-```text
-.
-|-- data/                  Supplied input, SAS source, and trusted outputs
-|-- configs/               Protected-artifact and pipeline configuration
-|-- docs/                  Development and team workflow documentation
-|-- generated/             Generated Python entry points
-|-- reference_python/      Human-reference implementation for the Mortality prototype
-|-- notebooks/             Exploratory notebooks
-|-- scripts/               Cross-platform runner entry scripts
-|-- src/sasguard/          Installable Python package
-|-- tests/                 Automated tests
-|-- .devcontainer/         VS Code Dev Container configuration
-|-- .github/workflows/     Continuous integration
-|-- Dockerfile             Canonical development image
-|-- compose.yaml           Local container workflow
-`-- pyproject.toml         Dependencies and development-tool configuration
-```
-
-## Run with Docker
-
-### Prerequisites
-
-- Git
-- Docker Desktop, or Docker Engine with Docker Compose
-
-### Windows PowerShell
-
-```powershell
-git clone https://github.com/Break-Through-Tech/Abt-Global-1A-ai-powered-sas-migration.git
-Set-Location .\Abt-Global-1A-ai-powered-sas-migration
-docker compose build
-docker compose run --rm sasguard sasguard verify-integrity
-docker compose run --rm sasguard pytest
-docker compose run --rm sasguard sasguard version
-```
-
-### macOS zsh
-
-```zsh
-git clone https://github.com/Break-Through-Tech/Abt-Global-1A-ai-powered-sas-migration.git
-cd Abt-Global-1A-ai-powered-sas-migration
-docker compose build
-docker compose run --rm sasguard sasguard verify-integrity
-docker compose run --rm sasguard pytest
-docker compose run --rm sasguard sasguard version
-```
-
-The expected CLI version is currently `0.1.0`.
-
-### Start JupyterLab
-
-The following one-line command works in PowerShell and zsh:
-
-```bash
-docker compose run --rm --service-ports sasguard jupyter lab --ip=0.0.0.0 --no-browser
-```
-
-Open the tokenized URL shown in the terminal. The repository is mounted at `/workspace`, and the
-supplied `data/` directory is mounted read-only inside the container.
-
-See [Development setup](docs/development-setup.md) for VS Code Dev Containers, optional local
-Python environments, and troubleshooting.
-
-For a local model experiment with synthetic SAS, see
-[Test a local model](docs/local-model-smoke.md). It uses native Ollama for generation,
-the isolated Docker runner for execution, and a deterministic check on the host.
-
-## Team workflow
-
-- Read [Contributing](CONTRIBUTING.md) before creating a branch or pull request.
-- Read [Issues and project board](docs/issues-and-project-board.md) before starting an issue.
-- Track work on the [Abt-Global-1A Project Board](https://github.com/orgs/Break-Through-Tech/projects/58).
-- View the repository's [GitHub issues](https://github.com/Break-Through-Tech/Abt-Global-1A-ai-powered-sas-migration/issues).
-
-## Data integrity
-
-Supplied SAS programs, input data, and trusted output artifacts are source-of-truth materials.
-Contributors must not modify them to make generated results pass. Comparisons must align records
-by `PROVIDER_ID`, preserve missing values, and explain numerical tolerances.
-
-Run `docker compose run --rm sasguard sasguard verify-integrity` before requesting review. The
-check validates all supplied artifacts against a version-controlled SHA-256 manifest. See
-[Protected artifact integrity](docs/data-integrity.md) for the trust boundary and update policy.
-
-SASGuard also provides versioned models for machine-readable artifact comparisons and run
-provenance. See [Reproducible run manifests](docs/run-manifests.md) for the schema and usage.
-
-Dependency lockfiles pin the Python packages used in development and runner builds.
-Mortality runs record the controller and container environments and execute a resolved
-immutable Docker image ID. See [Reproducing a verified run](docs/reproducibility.md)
-for lockfile updates, image replay, and rebuild limits.
-
-The Mortality prototype also writes a deterministic artifact trace. The trace shows which
-declared artifact checkpoints passed, failed, or were not checked, and reports the earliest
-observed failures in the checked graph. It does not infer SAS statement-level causes. See
-[Golden artifact traces](docs/golden-trace.md) for the status rules and limits.
-
-Generated Python runs in a separate network-disabled Docker service that cannot access trusted SAS
-outputs. See [Isolated generated-code runner](docs/isolated-runner.md) for its access boundary,
-PowerShell and zsh commands, machine-readable results, and limitations.
+Contributors: read [Contributing](CONTRIBUTING.md) and
+[Issues and project board](docs/issues-and-project-board.md), and track work on the
+[project board](https://github.com/orgs/Break-Through-Tech/projects/58). Never modify the
+supplied artifacts to make a result pass; run `sasguard verify-integrity` before review.
 
 ## License
 
-The project license has not yet been selected. The team will confirm an appropriate license with
-the Challenge Advisor before publishing one.
+The project license has not yet been selected. The team will confirm an appropriate license
+with the Challenge Advisor before publishing one.
