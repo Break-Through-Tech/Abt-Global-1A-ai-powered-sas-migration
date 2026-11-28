@@ -122,6 +122,13 @@ def test_tie_resolver_must_choose_a_tied_cluster():
         assign_nearest([1], [0, 2, 9], on_tie=lambda score, tied: 3)
 
 
+@pytest.mark.parametrize("choice", [1.0, True])
+def test_tie_resolver_must_return_an_integer_cluster(choice):
+    # 1.0 and True both compare equal to 1, so they would slip past "in tied".
+    with pytest.raises(ValueError, match="tied cluster"):
+        assign_nearest([1], [0, 2], on_tie=lambda score, tied: choice)
+
+
 def test_strict_marks_far_scores_negative_and_keeps_equality():
     assert assign_nearest([0, 1, 2.5], [0], strict=1) == [1, 1, -1]
 

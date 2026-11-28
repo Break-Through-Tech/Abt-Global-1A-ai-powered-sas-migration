@@ -219,7 +219,7 @@ def assign_nearest(
             )
         else:
             cluster = on_tie(point, tied)
-            if cluster not in tied:
+            if type(cluster) is not int or cluster not in tied:
                 raise ValueError("on_tie must return one of the tied cluster IDs")
         if strict is not None:
             cluster = strict_cluster_identifier(cluster, distance, strict)
